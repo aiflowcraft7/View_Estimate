@@ -211,7 +211,8 @@ function priceLine(svc: ServiceConfig, p: PropertyFacts, sel: ServiceSelection):
 
   const raw = base + addons.reduce((s, a) => s + a.amount, 0);
   const minimumApplied = !!svc.minPrice && raw < svc.minPrice;
-  const total = money(minimumApplied ? svc.minPrice! : raw);
+  // Homeowners see whole dollars per line.
+  const total = Math.round(minimumApplied ? svc.minPrice! : raw);
 
   return {
     serviceId: svc.id,
@@ -238,7 +239,7 @@ function bestBundle(bundles: Bundle[], selected: string[], subtotal: number): Qu
   let best: QuoteResult["discount"] = null;
   for (const b of bundles) {
     if (!bundleApplies(b, selected)) continue;
-    const amount = money(Math.min(subtotal, b.type === "pct" ? (subtotal * b.value) / 100 : b.value));
+    const amount = Math.round(Math.min(subtotal, b.type === "pct" ? (subtotal * b.value) / 100 : b.value));
     if (!best || amount > best.amount) best = { bundleId: b.id, name: b.name, amount };
   }
   return best;

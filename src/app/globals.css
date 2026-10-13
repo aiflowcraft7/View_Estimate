@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-brand-50: #f0fdfa;
+  --color-brand-100: #ccfbf1;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0d9488;
+  --color-brand-700: #0f766e;
+  --color-brand-800: #115e59;
+  --color-brand-900: #134e4a;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: #fafafa;
+  color: #18181b;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Quote widget: brand color comes from the business (set inline as --accent). */
+.qf {
+  --accent: #0f766e;
+}
+.qf .accent-bg { background-color: var(--accent); }
+.qf .accent-text { color: var(--accent); }
+.qf .accent-border { border-color: var(--accent); }
+.qf .accent-ring:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* The embedded widget sits on the customer's website: no page background. */
+body:has(.embed-root) { background: transparent; }

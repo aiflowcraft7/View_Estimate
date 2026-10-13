@@ -128,7 +128,7 @@ export async function claimBusiness(token: string, userId: string, email: string
       status: "trial",
       createdAt: new Date(), // trial clock starts at claim time
       alertEmail: b.alertEmail ?? email,
-      onboardingComplete: false,
+      onboardingComplete: true, // the admin already set prices and branding
       updatedAt: new Date(),
     })
     .where(and(eq(businesses.id, b.id), isNull(businesses.claimedAt)))

@@ -9,8 +9,8 @@
     "start": "next start",
     "build:widget": "esbuild src/widget/loader.ts --bundle --minify --format=iife --target=es2018 --outfile=public/w.js",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed": "tsx scripts/seed.ts",
+    "db:migrate": "tsx --conditions=react-server --env-file-if-exists=.env scripts/migrate.ts",
+    "db:seed": "tsx --conditions=react-server --env-file-if-exists=.env scripts/seed.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -37,6 +37,7 @@
     "@types/react-dom": "^19.3.0",
     "drizzle-kit": "^0.31.11",
     "esbuild": "^0.28.2",
+    "playwright": "^1.64.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "5.9",

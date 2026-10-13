@@ -11,10 +11,10 @@ export const SERVICE_TEMPLATES: ServiceConfig[] = [
     name: "House wash",
     description: "Soft wash of siding, trim and soffits",
     icon: "home",
-    unit: "living_sqft",
-    rate: 0.18,
+    unit: "house_sqft",
+    rate: 0.22,
     minPrice: 249,
-    storyMultipliers: { "1": 1, "2": 1.15, "3": 1.35 },
+    storyMultipliers: { "1": 1, "2": 1.6, "3": 2.1 },
     confirmOnsite: { maxStories: 3, maxLivingSqft: 6000 },
     addons: [
       { id: "rust_removal", name: "Rust stain removal", unit: "flat", price: 75 },

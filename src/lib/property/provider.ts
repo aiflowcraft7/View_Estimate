@@ -159,7 +159,7 @@ class SimulatedProvider implements PropertyProvider {
   async buildingInsights(lat: number, lng: number): Promise<SolarInsights | null> {
     const h = hash(`${lat.toFixed(5)},${lng.toFixed(5)}`);
     if (h % 17 === 0) return null; // some addresses have no data, like real rural coverage gaps
-    const ground = 110 + (h % 160); // 110-270 m2 = 1,180-2,900 sq ft
+    const ground = 90 + (h % 120); // 90-210 m2 = about 970-2,260 sq ft footprint
     const pitch = 15 + ((h >> 8) % 30);
     const roof = ground / Math.cos((pitch * Math.PI) / 180);
     return {
