@@ -29,12 +29,16 @@ export function priceQuote(config: PricingConfig, property: PropertyFacts, selec
       errors.push(`Unknown service: ${sel.serviceId}`);
       continue;
     }
-    lines.push(priceLine(svc, property, sel));
+    const line = priceLine(svc, property, sel);
+    // Round each line to the configured step so the lines always add up to the total.
+    if (!line.minimumApplied) line.total = roundTo(line.total, rules.roundTo);
+    lines.push(line);
   }
 
   const subtotal = money(lines.reduce((s, l) => s + l.total, 0));
   const selectedIds = lines.map((l) => l.serviceId);
   const discount = bestBundle(config.bundles ?? [], selectedIds, subtotal);
+  if (discount) discount.amount = roundTo(discount.amount, rules.roundTo);
 
   let total = subtotal - (discount?.amount ?? 0);
   let orderMinimumApplied = false;

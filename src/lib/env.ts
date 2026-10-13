@@ -59,6 +59,10 @@ export const env = {
   get emailFrom() {
     return str("EMAIL_FROM") ?? "ViewEstimate <alerts@viewestimate.com>";
   },
+  /** Legal entity shown in the privacy policy and terms. */
+  get legalName() {
+    return str("LEGAL_ENTITY_NAME") ?? str("APP_NAME") ?? "ViewEstimate";
+  },
   get supportEmail() {
     return str("SUPPORT_EMAIL") ?? "support@viewestimate.com";
   },
@@ -156,7 +160,7 @@ export function serviceStatus(): ServiceStatus[] {
     { name: "Bot check (Turnstile)", live: !!env.turnstileSecret, note: env.turnstileSecret ? "Live" : "Skipped" },
     { name: "Google sign-in", live: !!env.googleOAuthClientId, note: env.googleOAuthClientId ? "Live" : "Hidden; magic links only" },
     { name: "Jobber", live: !!env.jobberClientId, note: env.jobberClientId ? "Live" : "Hidden until keys are added" },
-    { name: "File storage", live: !!(env.supabaseUrl && env.supabaseServiceKey), note: env.supabaseUrl ? "Supabase Storage" : "Local disk (.data/uploads)" },
+    { name: "File storage", live: !!(env.supabaseUrl && env.supabaseServiceKey), note: env.supabaseUrl ? "Supabase Storage" : "Kept in the database (local only)" },
     { name: "Error tracking (Sentry)", live: !!env.sentryDsn, note: env.sentryDsn ? "Live" : "Console only" },
   ];
 }

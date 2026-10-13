@@ -150,7 +150,7 @@ class SimulatedProvider implements PropertyProvider {
       placeId,
       formattedAddress: text,
       lat: c.lat + ((h % 1000) - 500) / 10000,
-      lng: c.lng + (((h >> 10) % 1000) - 500) / 10000,
+      lng: c.lng + (((h >>> 10) % 1000) - 500) / 10000,
       zip: c.zip,
       state: c.state,
     };
@@ -160,7 +160,7 @@ class SimulatedProvider implements PropertyProvider {
     const h = hash(`${lat.toFixed(5)},${lng.toFixed(5)}`);
     if (h % 17 === 0) return null; // some addresses have no data, like real rural coverage gaps
     const ground = 90 + (h % 120); // 90-210 m2 = about 970-2,260 sq ft footprint
-    const pitch = 15 + ((h >> 8) % 30);
+    const pitch = 15 + ((h >>> 8) % 30);
     const roof = ground / Math.cos((pitch * Math.PI) / 180);
     return {
       imageryQuality: "HIGH",

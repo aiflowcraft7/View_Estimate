@@ -96,3 +96,10 @@ export function usd(n: number | null | undefined): string {
   if (n == null) return "—";
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n % 1 ? 2 : 0 });
 }
+
+/** +18135550100 -> (813) 555-0100 */
+export function formatPhone(p: string | null | undefined): string {
+  if (!p) return "—";
+  const m = p.replace(/\D/g, "").match(/^1?(\d{3})(\d{3})(\d{4})$/);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : p;
+}

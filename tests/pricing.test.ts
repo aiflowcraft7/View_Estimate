@@ -228,6 +228,11 @@ describe("confirm on site, range and rounding", () => {
   it("rounds to whole dollars by default", () => {
     expect(priceQuote(cfg([svc({ unit: "flat", rate: 99.6 })]), home, [{ serviceId: "s" }]).total).toBe(100);
   });
+  it("line items add up to the total when rounding", () => {
+    const r = priceQuote(DEFAULT_PRICING, home, [{ serviceId: "house_wash" }, { serviceId: "roof_wash" }]);
+    const sum = r.lines.reduce((s, l) => s + l.total, 0) - (r.discount?.amount ?? 0);
+    expect(sum).toBe(r.total);
+  });
   it("roundTo helper", () => {
     expect(roundTo(437.5, 5)).toBe(440);
     expect(roundTo(12.4)).toBe(12);
