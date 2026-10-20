@@ -29,6 +29,9 @@ export function getDb(): Promise<Db> {
 }
 
 async function connect(): Promise<Db> {
+  if (!env.databaseUrl && env.runtimeProduction) {
+    throw new Error("DATABASE_URL is required in production");
+  }
   if (env.databaseUrl) {
     const { default: postgres } = await import("postgres");
     // prepare:false keeps it compatible with Supabase's transaction pooler (port 6543).

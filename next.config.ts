@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // 127.0.0.1 and localhost are different origins. Without this, dev HMR from one of them is rejected.
+  allowedDevOrigins: ["127.0.0.1"],
   // PGlite (the zero-setup local database) ships WASM that must not be bundled.
   serverExternalPackages: ["@electric-sql/pglite"],
   poweredByHeader: false,

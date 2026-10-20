@@ -1,22 +1,38 @@
 import Link from "next/link";
 import { ensureDemoBusiness } from "@/lib/demo";
 import { PLANS } from "@/lib/billing/plans";
+import { HeroCarousel } from "./HeroCarousel";
 
 export const dynamic = "force-dynamic";
 
-const STEPS = [
-  { t: "Homeowner types their address", d: "We measure the house and roof from satellite data and ask how many stories." },
-  { t: "They pick services and see a price", d: "Your prices, your minimums, your bundle discounts. Line by line, in seconds." },
-  { t: "You get the lead instantly", d: "By text and email, with the address, size, services and price. Synced to your CRM." },
+const HERO_STEPS = ["Customers type their address", "We measure the house", "They see your price", "You get the lead"];
+
+const WAYS = [
+  {
+    src: "/marketing/ways-quote.jpg",
+    alt: "A hosted quote page with the address, house wash selected, home size, a $486 price, and Book this job",
+    title: "Create a quote page",
+    body: "A hosted page you can link from Google, Facebook, Instagram, or anywhere else.",
+  },
+  {
+    src: "/marketing/ways-qr.jpg",
+    alt: "A door hanger, business card, and yard sign, each with a QR code, next to a phone showing the price",
+    title: "QR code",
+    body: "Print it on the truck, a yard sign, a door hanger, or a business card. People scan and get a price.",
+  },
+  {
+    src: "/marketing/ways-embed.jpg",
+    alt: "A contractor website with a house photo and the teal quote card embedded beside the services",
+    title: "Embed on your site",
+    body: "One line of code for WordPress, Wix, Squarespace, or GoHighLevel.",
+  },
 ];
 
-const FEATURES = [
-  ["Done-for-you setup, free", "We set your prices, brand the page and install it on your site. Live in 48 hours."],
-  ["Works on any website", "One line of code for WordPress, Wix, Squarespace or GoHighLevel. Plus a hosted page and a QR code for your trucks."],
-  ["Priced like you price", "Per sq ft of house, roof or flatwork, per window, per linear foot of gutter, size bands, minimums, add-ons and bundles."],
-  ["Honest estimates", "Homeowners confirm stories and can adjust the size. Big or unusual jobs show a range and a \"confirm on site\" note."],
-  ["Leads land in your CRM", "Jobber, GoHighLevel, Zapier or any webhook. Failed syncs retry automatically."],
-  ["Know what's working", "Visits, prices shown, leads and booked jobs, by website, hosted page and QR code."],
+const PROOF = [
+  ["Any website", "One line of code, plus a hosted page and a QR code for the truck."],
+  ["Your rates", "Per square foot, per window, per foot of gutter, with minimums, add-ons, and bundles."],
+  ["Your CRM", "Jobber, GoHighLevel, Zapier, or any webhook. Failed syncs retry."],
+  ["Channel stats", "Visits, prices shown, and leads from the widget, the hosted page, and the QR code."],
 ];
 
 const FAQ = [
@@ -31,76 +47,84 @@ export default async function Home() {
   const demo = await ensureDemoBusiness();
   return (
     <main>
-      <section className="bg-gradient-to-b from-brand-50 to-white">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 lg:grid-cols-2 lg:py-20">
+      <section>
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 lg:grid-cols-2 lg:py-24">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-brand-700">For pressure washing, soft washing, window and gutter pros</p>
-            <h1 className="mt-3 text-4xl font-extrabold tracking-tight text-zinc-900 sm:text-5xl">Instant prices on your website. Leads straight to your phone.</h1>
-            <p className="mt-5 text-lg text-zinc-600">
-              Homeowners type their address, pick services and see your price in seconds. You stop playing phone tag and start booking jobs, even at 10pm.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/login?next=/app/onboarding" className="rounded-lg bg-brand-700 px-5 py-3 font-semibold text-white hover:bg-brand-800">
-                Start your 14-day free trial
-              </Link>
-              <Link href="/demo" className="rounded-lg bg-white px-5 py-3 font-semibold text-zinc-900 ring-1 ring-zinc-300 hover:bg-zinc-50">
-                Try the demo
-              </Link>
-            </div>
+            <h1 className="text-5xl leading-[1.05] sm:text-6xl">Instant prices on your website. Leads straight to your phone.</h1>
+            <ol className="mt-8 space-y-3 text-lg text-zinc-700">
+              {HERO_STEPS.map((step, i) => (
+                <li key={step} className="flex items-baseline gap-3">
+                  <span className="w-5 font-semibold text-brand-700">{i + 1}</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+            <Link href="/login?next=/app/onboarding" className="mt-8 inline-block rounded-full bg-brand-700 px-6 py-3 font-semibold text-white hover:bg-brand-800">
+              Start your 14-day free trial
+            </Link>
             <p className="mt-4 text-sm text-zinc-500">No card needed. Free done-for-you setup. From ${PLANS.starter.monthly}/month.</p>
           </div>
-          <div className="rounded-2xl bg-zinc-100 p-3 shadow-xl ring-1 ring-zinc-200">
-            <iframe src={`/embed/${demo.slug}`} title="Live demo of the instant quote form" className="h-[640px] w-full rounded-xl bg-transparent" loading="lazy" />
+          <HeroCarousel />
+        </div>
+      </section>
+
+      <section className="px-4 py-16">
+        <div className="mx-auto max-w-xl">
+          <p className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">Live demo</p>
+          <h2 className="mt-3 text-center text-4xl">See the quote page</h2>
+          <div className="mt-8 rounded-[1.75rem] bg-[#efeae3] p-3">
+            <iframe src={`/embed/${demo.slug}`} title="Live demo of the instant quote form" className="h-[640px] w-full rounded-2xl bg-transparent" loading="lazy" />
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-16">
-        <h2 className="text-center text-3xl font-bold">How it works</h2>
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
-          {STEPS.map((s, i) => (
-            <div key={s.t} className="rounded-2xl bg-zinc-50 p-6">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-700 font-bold text-white">{i + 1}</span>
-              <h3 className="mt-4 text-lg font-semibold">{s.t}</h3>
-              <p className="mt-2 text-zinc-600">{s.d}</p>
+      <section className="mx-auto max-w-6xl px-4 py-8 pb-20">
+        <p className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">Put it everywhere</p>
+        <h2 className="mt-3 text-center text-4xl">Three ways to use the pricing widget</h2>
+        <div className="mt-12 grid gap-10 md:grid-cols-3">
+          {WAYS.map((way) => (
+            <figure key={way.title}>
+              <img src={way.src} alt={way.alt} className="aspect-[4/3] w-full rounded-3xl object-cover" />
+              <figcaption>
+                <h3 className="mt-4 text-xl font-semibold">{way.title}</h3>
+                <p className="mt-2 leading-6 text-zinc-600">{way.body}</p>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-[#efeae3] px-4 py-20">
+        <p className="mx-auto max-w-3xl text-center text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">The 9pm shopper already has a price.</p>
+        <div className="mx-auto mt-14 grid max-w-6xl gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          {PROOF.map(([title, body]) => (
+            <div key={title}>
+              <h3 className="text-lg font-semibold">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-zinc-600">{body}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="bg-zinc-50 py-16">
-        <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-3xl font-bold">Everything you need, nothing you don&apos;t</h2>
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map(([t, d]) => (
-              <div key={t} className="rounded-2xl bg-white p-6 ring-1 ring-zinc-200">
-                <h3 className="font-semibold">{t}</h3>
-                <p className="mt-2 text-sm text-zinc-600">{d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-3xl px-4 py-16">
-        <h2 className="text-center text-3xl font-bold">Questions</h2>
-        <div className="mt-8 divide-y divide-zinc-200">
-          {FAQ.map(([q, a]) => (
-            <details key={q} className="group py-4">
-              <summary className="cursor-pointer list-none font-semibold">
-                {q}
+      <section className="mx-auto max-w-3xl px-4 py-20">
+        <h2 className="text-center text-4xl">Questions</h2>
+        <div className="mt-10">
+          {FAQ.map(([question, answer]) => (
+            <details key={question} className="group border-b border-black/10 py-6">
+              <summary className="cursor-pointer list-none text-lg font-semibold">
+                {question}
                 <span className="float-right text-zinc-400 group-open:rotate-45">+</span>
               </summary>
-              <p className="mt-2 text-zinc-600">{a}</p>
+              <p className="mt-3 max-w-2xl leading-7 text-zinc-600">{answer}</p>
             </details>
           ))}
         </div>
       </section>
 
-      <section className="bg-brand-800 py-16 text-center text-white">
-        <h2 className="text-3xl font-bold">Put instant prices on your site this week</h2>
+      <section className="bg-brand-800 px-4 py-20 text-center text-white">
+        <h2 className="text-4xl">Put instant prices on your site this week</h2>
         <p className="mt-3 text-brand-100">We&apos;ll set it up for you, free. You approve the prices.</p>
-        <Link href="/login?next=/app/onboarding" className="mt-6 inline-block rounded-lg bg-white px-6 py-3 font-semibold text-brand-800 hover:bg-brand-50">
+        <Link href="/login?next=/app/onboarding" className="mt-8 inline-block rounded-full bg-white px-6 py-3 font-semibold text-brand-800 hover:bg-brand-50">
           Start free trial
         </Link>
       </section>

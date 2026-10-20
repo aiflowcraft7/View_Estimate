@@ -31,14 +31,19 @@ export type Plan = "starter" | "pro" | "founding";
 
 // ---------- Accounts ----------
 
-export const users = pgTable("users", {
-  id: id(),
-  email: text("email").notNull().unique(),
-  name: text("name"),
-  isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
-  createdAt: createdAt(),
-  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: id(),
+    clerkUserId: text("clerk_user_id"),
+    email: text("email").notNull().unique(),
+    name: text("name"),
+    isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
+    createdAt: createdAt(),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("users_clerk_user_id_idx").on(t.clerkUserId)],
+);
 
 export const sessions = pgTable(
   "sessions",

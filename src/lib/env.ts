@@ -19,6 +19,10 @@ export const env = {
   get isProduction() {
     return process.env.NODE_ENV === "production";
   },
+  /** Real production runtime. False while `next build` is collecting pages. */
+  get runtimeProduction() {
+    return process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build";
+  },
   /** Secret used to sign sessions, claim links and encrypt stored credentials. */
   get appSecret() {
     const s = str("APP_SECRET");
@@ -109,12 +113,15 @@ export const env = {
     return str("TURNSTILE_SECRET_KEY");
   },
 
-  // Google sign-in (optional; magic links always work)
-  get googleOAuthClientId() {
-    return str("GOOGLE_OAUTH_CLIENT_ID");
+  // Auth (Clerk)
+  get clerkPublishableKey() {
+    return str("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
   },
-  get googleOAuthClientSecret() {
-    return str("GOOGLE_OAUTH_CLIENT_SECRET");
+  get clerkSecretKey() {
+    return str("CLERK_SECRET_KEY");
+  },
+  get clerkWebhookSecret() {
+    return str("CLERK_WEBHOOK_SIGNING_SECRET");
   },
 
   // Jobber (CRM)
@@ -128,6 +135,9 @@ export const env = {
   // File storage (Supabase Storage); local disk when unset
   get supabaseUrl() {
     return str("SUPABASE_URL");
+  },
+  get supabaseAnonKey() {
+    return str("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   },
   get supabaseServiceKey() {
     return str("SUPABASE_SERVICE_ROLE_KEY");
@@ -149,6 +159,25 @@ export const env = {
 
 export type ServiceStatus = { name: string; live: boolean; note: string };
 
+/** Env vars that must exist before the app serves real customers. Empty outside production. */
+export function productionConfigGaps(): string[] {
+  if (!env.runtimeProduction) return [];
+  const gaps: string[] = [];
+  if (!env.databaseUrl) gaps.push("DATABASE_URL");
+  if (!str("APP_SECRET")) gaps.push("APP_SECRET");
+  if (!env.cronSecret) gaps.push("CRON_SECRET");
+  if (!env.clerkPublishableKey || !env.clerkSecretKey) gaps.push("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY");
+  if (!env.googleServerKey) gaps.push("GOOGLE_MAPS_SERVER_KEY");
+  if (!env.resendKey) gaps.push("RESEND_API_KEY");
+  return gaps;
+}
+
+/** Throws when production is missing a required service. No-op in local dev and during `next build`. */
+export function assertProductionConfig(): void {
+  const gaps = productionConfigGaps();
+  if (gaps.length) throw new Error(`Production is missing required configuration: ${gaps.join(", ")}`);
+}
+
 /** Which services are live vs running in stand-in mode. Shown in the admin health view. */
 export function serviceStatus(): ServiceStatus[] {
   return [
@@ -157,8 +186,8 @@ export function serviceStatus(): ServiceStatus[] {
     { name: "Email (Resend)", live: !!env.resendKey, note: env.resendKey ? "Live" : "Saved to the dev outbox at /dev/outbox" },
     { name: "SMS (Twilio)", live: !!(env.twilioSid && env.twilioToken && env.twilioFrom), note: env.twilioSid ? "Live" : "Off; texts saved to the dev outbox" },
     { name: "Billing (Paddle)", live: !!(env.paddleApiKey && env.paddleClientToken), note: env.paddleApiKey ? `Live (${env.paddleEnv})` : "Simulated checkout" },
-    { name: "Bot check (Turnstile)", live: !!env.turnstileSecret, note: env.turnstileSecret ? "Live" : "Skipped" },
-    { name: "Google sign-in", live: !!env.googleOAuthClientId, note: env.googleOAuthClientId ? "Live" : "Hidden; magic links only" },
+    { name: "Bot check (Turnstile)", live: !!env.turnstileSecret, note: env.turnstileSecret ? "Live" : env.runtimeProduction ? "Required — lead submit is blocked until this is set" : "Skipped in local dev" },
+    { name: "Auth (Clerk)", live: !!(env.clerkPublishableKey && env.clerkSecretKey), note: env.clerkPublishableKey ? "Live" : "Required in production" },
     { name: "Jobber", live: !!env.jobberClientId, note: env.jobberClientId ? "Live" : "Hidden until keys are added" },
     { name: "File storage", live: !!(env.supabaseUrl && env.supabaseServiceKey), note: env.supabaseUrl ? "Supabase Storage" : "Kept in the database (local only)" },
     { name: "Error tracking (Sentry)", live: !!env.sentryDsn, note: env.sentryDsn ? "Live" : "Console only" },

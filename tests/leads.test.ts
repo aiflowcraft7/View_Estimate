@@ -78,4 +78,48 @@ describe("quote -> lead -> alerts", () => {
     expect(decryptJson<{ secretValue: number }>(c)).toEqual({ secretValue: 1 });
     expect(decryptJson("v1.bad.bad.bad")).toBeNull();
   });
+
+  it("persists staining onsite confirmation without changing the total", async () => {
+    const { business } = await makeOwner("Onsite Wash Co");
+    const pb = (await getPublicBusiness(business.slug))!;
+    const base = {
+      footprintSqft: 1000,
+      livingSqft: 2000,
+      roofSqft: 1400,
+      perimeterFt: 170,
+      stories: 2,
+      source: "solar" as const,
+      siding: "vinyl" as const,
+    };
+    const clean = await saveQuote({
+      business: pb,
+      property: { ...base, staining: false },
+      selections: [{ serviceId: "house_wash" }],
+      channel: "widget",
+      address: "2 Oak St, Tampa, FL",
+    });
+    const flagged = await saveQuote({
+      business: pb,
+      property: { ...base, staining: true },
+      selections: [{ serviceId: "house_wash" }],
+      channel: "widget",
+      address: "2 Oak St, Tampa, FL",
+    });
+    expect(clean.result.needsOnsiteConfirmation).toBe(false);
+    expect(flagged.result.needsOnsiteConfirmation).toBe(true);
+    expect(flagged.result.total).toBe(clean.result.total);
+    expect(flagged.result.displayMode).toBe("range");
+
+    const { lead } = await createLead({
+      business: pb,
+      quoteId: flagged.id,
+      name: "On Site Owner",
+      phone: "8135550111",
+      email: "onsite@example.com",
+      smsConsent: false,
+      address: "2 Oak St, Tampa, FL",
+      total: flagged.result.total,
+    });
+    expect(lead.total).toBe(flagged.result.total);
+  });
 });

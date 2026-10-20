@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createHmac } from "node:crypto";
 import { safeNext } from "@/lib/auth";
+import { productionConfigGaps } from "@/lib/env";
+import { verifyTurnstile } from "@/lib/turnstile";
 import { applyPaddleEvent, verifyPaddleSignature } from "@/lib/billing/paddle";
 import { widgetMode } from "@/lib/billing/plans";
 import { slugify } from "@/lib/business";
@@ -143,11 +145,62 @@ describe("helpers", () => {
     const n = buildPropertyFacts(null, { stories: 1, livingSqft: 1500, source: "band" });
     expect(n.roofSqft).toBe(1800);
     expect(buildPropertyFacts(null, { stories: 1, source: "none" }).source).toBe("none");
+    const answered = buildPropertyFacts(null, { stories: 2, livingSqft: 2000, source: "band", siding: "stucco", staining: true, neglectedGutters: true });
+    expect(answered.siding).toBe("stucco");
+    expect(answered.staining).toBe(true);
+    expect(answered.neglectedGutters).toBe(true);
   });
   it("rate limiter blocks after the limit", async () => {
     const key = `t:${Date.now()}`;
     expect(await rateLimit(key, 2, 60)).toBe(true);
     expect(await rateLimit(key, 2, 60)).toBe(true);
     expect(await rateLimit(key, 2, 60)).toBe(false);
+  });
+  it("fails closed in production when required keys or Turnstile are missing", async () => {
+    const prev = {
+      NODE_ENV: process.env.NODE_ENV,
+      NEXT_PHASE: process.env.NEXT_PHASE,
+      APP_SECRET: process.env.APP_SECRET,
+      CRON_SECRET: process.env.CRON_SECRET,
+      RESEND_API_KEY: process.env.RESEND_API_KEY,
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+      CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+      GOOGLE_MAPS_SERVER_KEY: process.env.GOOGLE_MAPS_SERVER_KEY,
+      DATABASE_URL: process.env.DATABASE_URL,
+      TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
+    };
+    const env = process.env as Record<string, string | undefined>;
+    const restore = () => {
+      for (const [k, v] of Object.entries(prev)) {
+        if (v === undefined) delete env[k];
+        else env[k] = v;
+      }
+    };
+    try {
+      env.NODE_ENV = "production";
+      delete env.NEXT_PHASE;
+      delete process.env.APP_SECRET;
+      delete process.env.CRON_SECRET;
+      delete process.env.RESEND_API_KEY;
+      delete process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+      delete process.env.CLERK_SECRET_KEY;
+      delete process.env.GOOGLE_MAPS_SERVER_KEY;
+      process.env.DATABASE_URL = "";
+      delete process.env.TURNSTILE_SECRET_KEY;
+      expect(productionConfigGaps()).toEqual(
+        expect.arrayContaining(["DATABASE_URL", "APP_SECRET", "CRON_SECRET", "GOOGLE_MAPS_SERVER_KEY", "RESEND_API_KEY"]),
+      );
+      expect(await verifyTurnstile("token")).toBe(false);
+      process.env.APP_SECRET = "x".repeat(40);
+      process.env.CRON_SECRET = "cron";
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test";
+      process.env.CLERK_SECRET_KEY = "sk_test";
+      process.env.GOOGLE_MAPS_SERVER_KEY = "google";
+      process.env.DATABASE_URL = "postgres://localhost/viewestimate";
+      process.env.RESEND_API_KEY = "re_test";
+      expect(productionConfigGaps()).toEqual([]);
+    } finally {
+      restore();
+    }
   });
 });

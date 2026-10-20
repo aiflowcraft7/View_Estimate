@@ -1,12 +1,13 @@
-import type {
-  Band,
-  Bundle,
-  PricingConfig,
-  PropertyFacts,
-  QuoteLine,
-  QuoteResult,
-  ServiceConfig,
-  ServiceSelection,
+import {
+  SIDING_LABELS,
+  type Band,
+  type Bundle,
+  type PricingConfig,
+  type PropertyFacts,
+  type QuoteLine,
+  type QuoteResult,
+  type ServiceConfig,
+  type ServiceSelection,
 } from "./types";
 
 /**
@@ -211,6 +212,18 @@ function priceLine(svc: ServiceConfig, p: PropertyFacts, sel: ServiceSelection):
   if (rules.onManualSize && p.source === "manual") {
     confirmOnsite = true;
     notes.push("Size entered by hand, confirmed on site");
+  }
+  if (p.siding && rules.sidingOnsite?.includes(p.siding)) {
+    confirmOnsite = true;
+    notes.push(`${SIDING_LABELS[p.siding]} siding is confirmed on site`);
+  }
+  if (rules.onStaining && p.staining) {
+    confirmOnsite = true;
+    notes.push("Visible staining is confirmed on site");
+  }
+  if (rules.onNeglectedGutters && p.neglectedGutters) {
+    confirmOnsite = true;
+    notes.push("Gutters that haven't been cleaned in years are confirmed on site");
   }
 
   const raw = base + addons.reduce((s, a) => s + a.amount, 0);

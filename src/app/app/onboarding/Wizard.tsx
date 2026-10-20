@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ServiceIcon } from "@/components/quote/icons";
-import { Button, Field, Input, Notice, Select, Textarea } from "@/components/ui";
+import { Button, Field, Input, Notice, Select } from "@/components/ui";
 import { SERVICE_TEMPLATES } from "@/lib/pricing/templates";
 import { createBusinessAction, type OnboardingInput } from "./actions";
 
@@ -14,7 +14,7 @@ const TIMEZONES = [
   ["America/Los_Angeles", "Pacific"],
 ];
 const COLORS = ["#0f766e", "#0e7490", "#1d4ed8", "#4338ca", "#15803d", "#b45309", "#be123c", "#18181b"];
-const STEPS = ["Your business", "Alerts", "Services", "Service area"];
+const STEPS = ["Your business", "Services", "Your area"];
 
 export function Wizard({ email }: { email: string }) {
   const [step, setStep] = useState(0);
@@ -26,7 +26,7 @@ export function Wizard({ email }: { email: string }) {
     website: "",
     alertEmail: email,
     alertPhone: "",
-    smsAlerts: true,
+    smsAlerts: false,
     brandColor: COLORS[0],
     serviceIds: ["house_wash", "roof_wash", "driveway"],
     zips: "",
@@ -39,8 +39,9 @@ export function Wizard({ email }: { email: string }) {
   function next() {
     setError(null);
     if (step === 0 && d.name.trim().length < 2) return setError("Enter your business name");
-    if (step === 1 && !/^\S+@\S+\.\S+$/.test(d.alertEmail)) return setError("Enter a valid alert email");
-    if (step === 2 && !d.serviceIds.length) return setError("Pick at least one service");
+    if (step === 1 && !d.serviceIds.length) return setError("Pick at least one service");
+    if (step === 2 && (d.centerText ?? "").trim().length < 3) return setError("Enter the city you work in");
+    if (step === 2 && !(d.radiusMiles && d.radiusMiles > 0)) return setError("Enter how many miles you travel");
     if (step < STEPS.length - 1) return setStep(step + 1);
     start(async () => {
       const r = await createBusinessAction(d);
@@ -89,36 +90,11 @@ export function Wizard({ email }: { email: string }) {
                 <input type="color" value={d.brandColor} onChange={(e) => set("brandColor", e.target.value)} className="h-8 w-10 cursor-pointer rounded" aria-label="Custom color" />
               </div>
             </Field>
-            <Field label="Time zone">
-              <Select value={d.timezone} onChange={(e) => set("timezone", e.target.value)}>
-                {TIMEZONES.map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <p className="text-sm text-zinc-500">Lead alerts go to {email}. You can add a text number later in Settings.</p>
           </div>
         )}
 
         {step === 1 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold">Where should new leads go?</h2>
-            <p className="text-sm text-zinc-600">You get every lead within seconds, with the address, services and price.</p>
-            <Field label="Alert email" htmlFor="alertEmail">
-              <Input id="alertEmail" type="email" value={d.alertEmail} onChange={(e) => set("alertEmail", e.target.value)} />
-            </Field>
-            <Field label="Mobile number for text alerts" htmlFor="alertPhone" hint="Optional. US numbers only.">
-              <Input id="alertPhone" type="tel" value={d.alertPhone} onChange={(e) => set("alertPhone", e.target.value)} placeholder="(813) 555-0100" />
-            </Field>
-            <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" checked={d.smsAlerts} onChange={(e) => set("smsAlerts", e.target.checked)} className="mt-0.5 h-4 w-4 rounded" />
-              <span>Text me new leads. I agree to receive lead alerts at this number. Reply STOP to opt out.</span>
-            </label>
-          </div>
-        )}
-
-        {step === 2 && (
           <div>
             <h2 className="text-lg font-bold">Which services do you offer?</h2>
             <p className="mt-1 text-sm text-zinc-600">We start you with typical prices. You can change every number next.</p>
@@ -148,20 +124,26 @@ export function Wizard({ email }: { email: string }) {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 2 && (
           <div className="space-y-4">
             <h2 className="text-lg font-bold">Where do you work?</h2>
-            <p className="text-sm text-zinc-600">Addresses outside your area still become leads, but they don&apos;t see a price. Leave both empty to serve everywhere.</p>
+            <p className="text-sm text-zinc-600">Addresses outside this area still become leads, but they don&apos;t see a price. You can add ZIP codes later in Settings.</p>
             <div className="grid gap-4 sm:grid-cols-[1fr_120px]">
-              <Field label="Center city or address" htmlFor="center">
-                <Input id="center" value={d.centerText} onChange={(e) => set("centerText", e.target.value)} placeholder="Tampa, FL" />
+              <Field label="City or metro" htmlFor="center">
+                <Input id="center" value={d.centerText} onChange={(e) => set("centerText", e.target.value)} placeholder="Tampa, FL" autoFocus />
               </Field>
               <Field label="Radius (miles)" htmlFor="radius">
-                <Input id="radius" type="number" min={0} max={200} value={d.radiusMiles ?? ""} onChange={(e) => set("radiusMiles", Number(e.target.value) || 0)} />
+                <Input id="radius" type="number" min={1} max={200} value={d.radiusMiles ?? ""} onChange={(e) => set("radiusMiles", Number(e.target.value) || 0)} />
               </Field>
             </div>
-            <Field label="And/or ZIP codes" htmlFor="zips" hint="Separate with commas or spaces.">
-              <Textarea id="zips" rows={3} value={d.zips} onChange={(e) => set("zips", e.target.value)} placeholder="33602, 33603, 33606" />
+            <Field label="Time zone">
+              <Select value={d.timezone} onChange={(e) => set("timezone", e.target.value)}>
+                {TIMEZONES.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </Select>
             </Field>
           </div>
         )}

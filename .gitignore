@@ -8,3 +8,4 @@ out
 next-env.d.ts
 public/w.js
 coverage
+.clerk/

@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { priceQuote } from "@/lib/pricing/engine";
-import { HOME_SIZE_BANDS } from "@/lib/pricing/templates";
-import type { PricingConfig, PropertyFacts, QuoteResult, ServiceConfig, ServiceSelection, SizeSource } from "@/lib/pricing/types";
+import { DEFAULT_HOME_SQFT } from "@/lib/pricing/templates";
+import { SIDING_LABELS, SIDING_TYPES, type PricingConfig, type PropertyFacts, type QuoteResult, type ServiceConfig, type ServiceSelection, type SidingType, type SizeSource } from "@/lib/pricing/types";
 import { buildPropertyFacts } from "@/lib/property/facts";
 import { ServiceIcon } from "./icons";
 
@@ -30,17 +30,12 @@ type Measured = {
   roofPitchDegrees: number | null;
   source: "solar" | "none";
 };
-type Step = "address" | "size" | "services" | "price" | "form" | "done";
-
-const STEPS: { id: Step; label: string }[] = [
-  { id: "address", label: "Address" },
-  { id: "size", label: "Home" },
-  { id: "services", label: "Services" },
-  { id: "price", label: "Price" },
-  { id: "form", label: "Book" },
-];
+type Step = "details" | "price" | "book" | "done";
 
 const TIME_WINDOWS = ["Any time", "Weekday morning", "Weekday afternoon", "Saturday", "As soon as possible"];
+const SIZE_MIN = 800;
+const SIZE_MAX = 8000;
+const SIZE_STEP = 50;
 
 function uid(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -52,6 +47,10 @@ function money(n: number): string {
 
 function priceLabel(r: QuoteResult): string {
   return r.displayMode === "range" && r.range ? `${money(r.range.low)} – ${money(r.range.high)}` : money(r.total);
+}
+
+function clampSize(n: number): number {
+  return Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(n / SIZE_STEP) * SIZE_STEP));
 }
 
 declare global {
@@ -82,11 +81,11 @@ export function QuoteFlow({
   const [placesToken, setPlacesToken] = useState(uid);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const [step, setStep] = useState<Step>("address");
+  const [step, setStep] = useState<Step>("details");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showLines, setShowLines] = useState(false);
 
-  // Address
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [manualAddress, setManualAddress] = useState(false);
@@ -94,29 +93,31 @@ export function QuoteFlow({
   const [address, setAddress] = useState("");
   const [inArea, setInArea] = useState(true);
 
-  // Size
   const [stories, setStories] = useState(1);
   const [sizeSource, setSizeSource] = useState<SizeSource>("none");
   const [livingSqft, setLivingSqft] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false);
+  const [siding, setSiding] = useState<SidingType>("vinyl");
+  const [staining, setStaining] = useState(false);
+  const [neglectedGutters, setNeglectedGutters] = useState(false);
 
-  // Services
   const services = useMemo(() => config.pricing.services.filter((s) => s.active !== false), [config.pricing.services]);
   const [selected, setSelected] = useState<Record<string, ServiceSelection>>({});
 
-  // Server quote
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [result, setResult] = useState<QuoteResult | null>(null);
   const [showPrice, setShowPrice] = useState(config.mode === "full");
 
-  // Lead form
   const [form, setForm] = useState({ name: "", phone: "", email: "", preferredWindow: TIME_WINDOWS[0], notes: "", website: "" });
   const [smsConsent, setSmsConsent] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement>(null);
 
-  // Report height to the parent page so the iframe resizes to fit.
+  const showSiding = services.some((s) => selected[s.id] && (s.unit === "house_sqft" || !!s.confirmOnsite?.sidingOnsite?.length));
+  const showStaining = services.some((s) => selected[s.id] && !!s.confirmOnsite?.onStaining);
+  const showGutters = services.some((s) => selected[s.id] && (s.unit === "gutter_lf" || !!s.confirmOnsite?.onNeglectedGutters));
+
   useEffect(() => {
     if (!embedded || !rootRef.current) return;
     const send = () => window.parent?.postMessage({ type: "viewestimate:height", slug: config.slug, height: Math.ceil(rootRef.current!.getBoundingClientRect().height) + 4 }, "*");
@@ -136,39 +137,60 @@ export function QuoteFlow({
     rootRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [step, embedded, config.slug]);
 
-  // Address autocomplete (debounced).
   useEffect(() => {
-    if (manualAddress || step !== "address") return;
+    if (manualAddress || step !== "details" || address) return;
     const q = query.trim();
     if (q.length < 3) {
       setSuggestions([]);
       return;
     }
-    const ctrl = new AbortController();
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`${api}/autocomplete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: q, sessionToken: placesToken }),
-          signal: ctrl.signal,
-        });
-        const json = await res.json();
-        if (!res.ok) {
-          setError(json.error ?? "Address search is unavailable.");
-          return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`${api}/autocomplete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: q, sessionToken: placesToken }),
+          });
+          if (cancelled) return;
+          const json = await res.json();
+          if (cancelled) return;
+          if (!res.ok) {
+            setError(json.error ?? "Address search is unavailable.");
+            return;
+          }
+          setError(null);
+          setSuggestions(json.suggestions ?? []);
+        } catch {
+          if (cancelled) return;
         }
-        setError(null);
-        setSuggestions(json.suggestions ?? []);
-      } catch {
-        /* aborted */
-      }
+      })();
     }, 250);
     return () => {
+      cancelled = true;
       clearTimeout(t);
-      ctrl.abort();
     };
-  }, [query, api, placesToken, manualAddress, step]);
+  }, [query, api, placesToken, manualAddress, step, address]);
+
+  function applyMeasurement(found: boolean, property: Measured | null, text: string) {
+    if (found && property) {
+      setMeasured(property);
+      setAddress(property.address);
+      setSizeSource(property.source === "solar" ? "solar" : "band");
+      setLivingSqft(property.source === "solar" ? null : DEFAULT_HOME_SQFT);
+      setAdjusting(property.source !== "solar");
+    } else {
+      setMeasured(null);
+      setAddress(text);
+      setSizeSource("band");
+      setLivingSqft(DEFAULT_HOME_SQFT);
+      setAdjusting(true);
+    }
+    setResult(null);
+    setQuoteId(null);
+    setStep("details");
+  }
 
   async function pickSuggestion(s: Suggestion) {
     setBusy(true);
@@ -182,22 +204,10 @@ export function QuoteFlow({
         body: JSON.stringify({ placeId: s.placeId, sessionToken: placesToken, sessionId, channel }),
       });
       const json = await res.json();
-      setPlacesToken(uid()); // a Places session ends with the details call
+      setPlacesToken(uid());
       if (!res.ok) throw new Error(json.error ?? "Lookup failed");
-      if (json.found) {
-        setMeasured(json.property);
-        setAddress(json.property.address);
-        setInArea(json.inArea);
-        setSizeSource(json.property.source === "solar" ? "solar" : "none");
-        setAdjusting(json.property.source !== "solar");
-      } else {
-        setMeasured(null);
-        setAddress(s.text);
-        setInArea(true);
-        setSizeSource("none");
-        setAdjusting(true);
-      }
-      setStep("size");
+      setInArea(json.found ? json.inArea : true);
+      applyMeasurement(!!json.found, json.found ? json.property : null, json.found ? json.property.address : s.text);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -205,15 +215,37 @@ export function QuoteFlow({
     }
   }
 
+  function editAddress() {
+    setAddress("");
+    setMeasured(null);
+    setQuery("");
+    setSuggestions([]);
+    setManualAddress(false);
+    setSizeSource("none");
+    setLivingSqft(null);
+    setAdjusting(false);
+    setResult(null);
+    setQuoteId(null);
+    setStep("details");
+  }
+
   const facts: PropertyFacts = useMemo(
     () =>
       buildPropertyFacts(
         measured ? { footprintSqft: measured.footprintSqft, roofSqft: measured.roofSqft, perimeterFt: measured.perimeterFt, roofPitchDegrees: measured.roofPitchDegrees } : null,
-        { stories, livingSqft, source: sizeSource },
+        {
+          stories,
+          livingSqft,
+          source: sizeSource,
+          siding: showSiding ? siding : null,
+          staining: showStaining ? staining : false,
+          neglectedGutters: showGutters ? neglectedGutters : false,
+        },
       ),
-    [measured, stories, livingSqft, sizeSource],
+    [measured, stories, livingSqft, sizeSource, showSiding, showStaining, showGutters, siding, staining, neglectedGutters],
   );
   const estimatedLiving = measured?.footprintSqft ? measured.footprintSqft * stories : null;
+  const sliderValue = sizeSource === "solar" && !adjusting && estimatedLiving ? estimatedLiving : (livingSqft ?? DEFAULT_HOME_SQFT);
 
   const selections = useMemo(() => Object.values(selected), [selected]);
   const live = useMemo(() => (selections.length ? priceQuote(config.pricing, facts, selections) : null), [config.pricing, facts, selections]);
@@ -227,11 +259,12 @@ export function QuoteFlow({
         next[s.id] = {
           serviceId: s.id,
           sizeOptionId: s.unit === "flat_sqft" ? s.sizeOptions?.[Math.min(1, (s.sizeOptions?.length ?? 1) - 1)]?.id : undefined,
-          quantity: s.unit === "window" ? Math.max(8, Math.round((estimatedLiving ?? livingSqft ?? 2000) / 130)) : undefined,
+          quantity: s.unit === "window" ? Math.max(8, Math.round((estimatedLiving ?? livingSqft ?? DEFAULT_HOME_SQFT) / 130)) : undefined,
           addons: [],
         };
       return next;
     });
+    setResult(null);
   }
 
   function updateSelection(id: string, patch: Partial<ServiceSelection>) {
@@ -247,7 +280,17 @@ export function QuoteFlow({
     });
   }
 
+  function useSlider(n: number) {
+    setLivingSqft(clampSize(n));
+    setSizeSource("manual");
+    setAdjusting(true);
+    setResult(null);
+  }
+
   async function getQuote() {
+    if (!address) return setError("Enter your address");
+    if (!selections.length) return setError("Pick at least one service");
+    if (sizeSource === "none") return setError("Tell us your home size");
     setBusy(true);
     setError(null);
     try {
@@ -268,6 +311,9 @@ export function QuoteFlow({
           stories,
           livingSqft: sizeSource === "manual" || sizeSource === "band" ? livingSqft : null,
           sizeSource,
+          siding: showSiding ? siding : null,
+          staining: showStaining ? staining : false,
+          neglectedGutters: showGutters ? neglectedGutters : false,
           selections,
           referrer: embedded ? document.referrer || undefined : undefined,
           utm: Object.keys(utm).length ? utm : undefined,
@@ -279,7 +325,8 @@ export function QuoteFlow({
       setShowPrice(json.showPrice);
       setInArea(json.inArea);
       setResult(json.result);
-      setStep(json.showPrice ? "price" : "form");
+      setShowLines(false);
+      setStep(json.showPrice ? "price" : "book");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -287,7 +334,6 @@ export function QuoteFlow({
     }
   }
 
-  // Turnstile (only when configured).
   const renderTurnstile = useCallback(() => {
     if (!turnstileSiteKey || !turnstileRef.current || !window.turnstile) return;
     turnstileRef.current.innerHTML = "";
@@ -300,7 +346,7 @@ export function QuoteFlow({
   }, [turnstileSiteKey]);
 
   useEffect(() => {
-    if (step !== "form" || !turnstileSiteKey) return;
+    if (step !== "book" || !turnstileSiteKey) return;
     if (window.turnstile) return renderTurnstile();
     const s = document.createElement("script");
     s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -344,13 +390,14 @@ export function QuoteFlow({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       if (window.turnstile) window.turnstile.reset();
+      setTurnstileToken(null);
     } finally {
       setBusy(false);
     }
   }
 
-  const stepIndex = STEPS.findIndex((s) => s.id === step);
   const accent = config.brandColor || "#0f766e";
+  const detailServices = services.filter((s) => selected[s.id] && (s.unit === "flat_sqft" || s.unit === "window" || s.addons?.length));
 
   return (
     <div ref={rootRef} className="qf mx-auto w-full max-w-xl text-zinc-900" style={{ ["--accent" as string]: accent }}>
@@ -364,20 +411,9 @@ export function QuoteFlow({
           )}
           <div className="min-w-0">
             <p className="truncate font-semibold">{config.name}</p>
-            <p className="truncate text-sm text-zinc-500">{config.headline || "Get an instant price"}</p>
+            <p className="truncate text-sm text-zinc-500">{config.headline || "Type your address to get an instant price"}</p>
           </div>
         </header>
-
-        {step !== "done" && (
-          <ol className="flex gap-1 px-5 pt-4" aria-label="Progress">
-            {STEPS.map((s, i) => (
-              <li key={s.id} className="flex-1">
-                <div className={`h-1.5 rounded-full ${i <= stepIndex ? "accent-bg" : "bg-zinc-200"}`} />
-                <span className={`mt-1 block text-[11px] ${i === stepIndex ? "font-semibold text-zinc-800" : "text-zinc-400"}`}>{s.label}</span>
-              </li>
-            ))}
-          </ol>
-        )}
 
         <div className="px-5 pb-5 pt-4">
           {error && (
@@ -386,312 +422,335 @@ export function QuoteFlow({
             </div>
           )}
 
-          {step === "address" && (
+          {step === "details" && (
             <section>
-              <h2 className="text-xl font-bold">What&apos;s your address?</h2>
-              <p className="mt-1 text-sm text-zinc-500">We use it to measure your home and price it instantly.</p>
-              {!manualAddress ? (
-                <div className="relative mt-4">
-                  <label htmlFor="ve-address" className="sr-only">
-                    Street address
-                  </label>
-                  <input
-                    id="ve-address"
-                    autoFocus={!embedded}
-                    autoComplete="street-address"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Start typing your street address"
-                    className="accent-ring block w-full rounded-xl border-0 px-4 py-3.5 text-base ring-1 ring-inset ring-zinc-300 focus:ring-2"
-                    role="combobox"
-                    aria-expanded={suggestions.length > 0}
-                    aria-controls="ve-suggestions"
-                    aria-autocomplete="list"
-                  />
-                  {busy && <p className="mt-2 text-sm text-zinc-500">Measuring your home…</p>}
-                  {suggestions.length > 0 && (
-                    <ul id="ve-suggestions" role="listbox" className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-zinc-200">
-                      {suggestions.map((s) => (
-                        <li key={s.placeId} role="option" aria-selected="false">
-                          <button type="button" onClick={() => pickSuggestion(s)} className="block w-full px-4 py-3 text-left hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none">
-                            <span className="block text-sm font-medium">{s.main}</span>
-                            <span className="block text-xs text-zinc-500">{s.secondary}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <button type="button" onClick={() => setManualAddress(true)} className="mt-3 text-sm text-zinc-500 underline underline-offset-2">
-                    I can&apos;t find my address
-                  </button>
-                </div>
-              ) : (
-                <form
-                  className="mt-4"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (query.trim().length < 5) return setError("Enter your full address");
-                    setError(null);
-                    setAddress(query.trim());
-                    setMeasured(null);
-                    setSizeSource("none");
-                    setAdjusting(true);
-                    setStep("size");
-                  }}
-                >
-                  <label htmlFor="ve-manual" className="text-sm font-medium">
-                    Full address
-                  </label>
-                  <input
-                    id="ve-manual"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="123 Main St, City, ST 12345"
-                    className="accent-ring mt-1 block w-full rounded-xl border-0 px-4 py-3 ring-1 ring-inset ring-zinc-300 focus:ring-2"
-                  />
-                  <PrimaryButton className="mt-4 w-full">Continue</PrimaryButton>
-                </form>
-              )}
-            </section>
-          )}
-
-          {step === "size" && (
-            <section>
-              <h2 className="text-xl font-bold">Tell us about your home</h2>
-              <p className="mt-1 truncate text-sm text-zinc-500">{address}</p>
-              {!inArea && (
-                <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
-                  We may not serve your area. You can still leave your details and we&apos;ll let you know.
-                </div>
-              )}
-
-              <fieldset className="mt-5">
-                <legend className="text-sm font-medium">How many stories?</legend>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {[1, 2, 3].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setStories(n)}
-                      aria-pressed={stories === n}
-                      className={`rounded-xl px-3 py-3 text-sm font-semibold ring-1 ring-inset ${stories === n ? "accent-bg text-white ring-transparent" : "ring-zinc-300 hover:bg-zinc-50"}`}
-                    >
-                      {n === 3 ? "3+" : n} {n === 1 ? "story" : "stories"}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              {sizeSource === "solar" && !adjusting && estimatedLiving ? (
-                <div className="mt-5 rounded-xl bg-zinc-50 p-4">
-                  <p className="text-sm text-zinc-600">From satellite imagery, your home is about</p>
-                  <p className="mt-1 text-2xl font-bold">{estimatedLiving.toLocaleString()} sq ft</p>
-                  <button type="button" onClick={() => setAdjusting(true)} className="accent-text mt-2 text-sm font-medium underline underline-offset-2">
-                    Adjust size
-                  </button>
-                </div>
-              ) : (
-                <fieldset className="mt-5">
-                  <legend className="text-sm font-medium">About how big is your home?</legend>
-                  <div className="mt-2 grid gap-2">
-                    {HOME_SIZE_BANDS.map((b) => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        onClick={() => {
-                          setLivingSqft(b.sqft);
-                          setSizeSource("band");
-                        }}
-                        aria-pressed={sizeSource === "band" && livingSqft === b.sqft}
-                        className={`rounded-xl px-4 py-2.5 text-left text-sm ring-1 ring-inset ${sizeSource === "band" && livingSqft === b.sqft ? "accent-border bg-zinc-50 font-semibold ring-2" : "ring-zinc-300 hover:bg-zinc-50"}`}
-                        style={sizeSource === "band" && livingSqft === b.sqft ? { ["--tw-ring-color" as string]: accent } : undefined}
-                      >
-                        {b.label}
-                      </button>
-                    ))}
-                  </div>
-                  <label className="mt-3 block text-sm text-zinc-600">
-                    Or enter it exactly:
-                    <span className="mt-1 flex items-center gap-2">
+              {!address ? (
+                <>
+                  <h2 className="text-xl font-bold">What&apos;s your address?</h2>
+                  <p className="mt-1 text-sm text-zinc-500">We measure the property and price it instantly.</p>
+                  {!manualAddress ? (
+                    <div className="relative mt-4">
+                      <label htmlFor="ve-address" className="sr-only">
+                        Street address
+                      </label>
                       <input
-                        type="number"
-                        inputMode="numeric"
-                        min={300}
-                        max={30000}
-                        placeholder="e.g. 2400"
-                        value={sizeSource === "manual" && livingSqft ? livingSqft : ""}
-                        onChange={(e) => {
-                          const v = Number(e.target.value);
-                          setLivingSqft(v > 0 ? v : null);
-                          setSizeSource(v > 0 ? "manual" : measured?.source === "solar" ? "solar" : "none");
-                        }}
-                        className="accent-ring w-32 rounded-lg border-0 px-3 py-2 ring-1 ring-inset ring-zinc-300 focus:ring-2"
+                        id="ve-address"
+                        autoFocus={!embedded}
+                        autoComplete="street-address"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Start typing your street address"
+                        className="accent-ring block w-full rounded-xl border-0 px-4 py-3.5 text-base ring-1 ring-inset ring-zinc-300 focus:ring-2"
+                        role="combobox"
+                        aria-expanded={suggestions.length > 0}
+                        aria-controls="ve-suggestions"
+                        aria-autocomplete="list"
                       />
-                      <span>sq ft</span>
-                    </span>
-                  </label>
-                  {measured?.source === "solar" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAdjusting(false);
-                        setSizeSource("solar");
-                        setLivingSqft(null);
-                      }}
-                      className="mt-2 text-sm text-zinc-500 underline underline-offset-2"
-                    >
-                      Use the satellite estimate
-                    </button>
-                  )}
-                </fieldset>
-              )}
-
-              <NavRow
-                onBack={() => setStep("address")}
-                onNext={() => {
-                  if (sizeSource === "none") return setError("Pick your home size to continue");
-                  setError(null);
-                  setStep("services");
-                }}
-                nextLabel="Choose services"
-              />
-            </section>
-          )}
-
-          {step === "services" && (
-            <section>
-              <h2 className="text-xl font-bold">What do you need cleaned?</h2>
-              <p className="mt-1 text-sm text-zinc-500">Pick one or more. Bundles save more.</p>
-              <div className="mt-4 grid gap-3">
-                {services.map((s) => {
-                  const sel = selected[s.id];
-                  const line = live?.lines.find((l) => l.serviceId === s.id);
-                  return (
-                    <div key={s.id} className={`rounded-xl ring-1 ring-inset ${sel ? "ring-2" : "ring-zinc-200"}`} style={sel ? { ["--tw-ring-color" as string]: accent } : undefined}>
-                      <button type="button" onClick={() => toggleService(s)} aria-pressed={!!sel} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${sel ? "accent-bg text-white" : "bg-zinc-100 text-zinc-600"}`}>
-                          <ServiceIcon name={s.icon} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-semibold">{s.name}</span>
-                          {s.description && <span className="block text-xs text-zinc-500">{s.description}</span>}
-                        </span>
-                        {sel && canShowLive && line ? <span className="text-sm font-semibold">{money(line.total)}</span> : null}
-                        <span className={`flex h-5 w-5 items-center justify-center rounded-full ring-1 ${sel ? "accent-bg text-white ring-transparent" : "ring-zinc-300"}`} aria-hidden="true">
-                          {sel ? "✓" : ""}
-                        </span>
+                      {busy && <p className="mt-2 text-sm text-zinc-500">Looking up your home…</p>}
+                      {suggestions.length > 0 && (
+                        <ul id="ve-suggestions" role="listbox" className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-xl bg-white shadow-lg ring-1 ring-zinc-200">
+                          {suggestions.map((s) => (
+                            <li key={s.placeId} role="none">
+                              <button type="button" role="option" aria-selected="false" onClick={() => pickSuggestion(s)} className="block w-full px-4 py-3 text-left hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none">
+                                <span className="block text-sm font-medium">{s.main}</span>
+                                <span className="block text-xs text-zinc-500">{s.secondary}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <button type="button" onClick={() => setManualAddress(true)} className="mt-3 text-sm text-zinc-500 underline underline-offset-2">
+                        Enter details manually
                       </button>
-                      {sel && (s.unit === "flat_sqft" || s.unit === "window" || s.addons?.length) ? (
-                        <div className="space-y-3 border-t border-zinc-100 px-4 py-3">
-                          {s.unit === "flat_sqft" && (
-                            <label className="block text-sm">
-                              <span className="font-medium">Size</span>
-                              <select
-                                value={sel.sizeOptionId ?? ""}
-                                onChange={(e) => updateSelection(s.id, { sizeOptionId: e.target.value })}
-                                className="accent-ring mt-1 block w-full rounded-lg border-0 px-3 py-2 ring-1 ring-inset ring-zinc-300"
-                              >
-                                {s.sizeOptions?.map((o) => (
-                                  <option key={o.id} value={o.id}>
-                                    {o.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          )}
-                          {s.unit === "window" && (
-                            <label className="block text-sm">
-                              <span className="font-medium">Number of windows</span>
-                              <input
-                                type="number"
-                                min={1}
-                                max={300}
-                                inputMode="numeric"
-                                value={sel.quantity ?? ""}
-                                onChange={(e) => updateSelection(s.id, { quantity: Math.max(0, Number(e.target.value) || 0) })}
-                                className="accent-ring mt-1 block w-28 rounded-lg border-0 px-3 py-2 ring-1 ring-inset ring-zinc-300"
-                              />
-                            </label>
-                          )}
-                          {s.addons?.map((a) => (
-                            <label key={a.id} className="flex items-center gap-2 text-sm">
-                              <input type="checkbox" checked={!!sel.addons?.some((x) => x.id === a.id)} onChange={() => toggleAddon(s.id, a.id)} className="h-4 w-4 rounded" style={{ accentColor: accent }} />
-                              <span className="flex-1">{a.name}</span>
-                              {canShowLive && <span className="text-zinc-500">{a.unit === "flat" ? `+${money(a.price)}` : `+${money(a.price)} each`}</span>}
-                            </label>
+                    </div>
+                  ) : (
+                    <form
+                      className="mt-4"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (query.trim().length < 5) return setError("Enter your full address");
+                        setError(null);
+                        setInArea(true);
+                        applyMeasurement(false, null, query.trim());
+                      }}
+                    >
+                      <label htmlFor="ve-manual" className="text-sm font-medium">
+                        Full address
+                      </label>
+                      <input
+                        id="ve-manual"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="123 Main St, City, ST 12345"
+                        className="accent-ring mt-1 block w-full rounded-xl border-0 px-4 py-3 ring-1 ring-inset ring-zinc-300 focus:ring-2"
+                      />
+                      <PrimaryButton type="submit" className="mt-4 w-full">Continue</PrimaryButton>
+                    </form>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-sm text-zinc-600">
+                      <span className="block font-medium text-zinc-900">{address}</span>
+                      {measured?.source !== "solar" && <span className="mt-1 block">No satellite match for that address — set the details below and you still get a price.</span>}
+                    </p>
+                    <button type="button" onClick={editAddress} className="shrink-0 text-sm font-medium text-zinc-500 underline underline-offset-2">
+                      Change
+                    </button>
+                  </div>
+                  {!inArea && (
+                    <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
+                      We may not serve your area. You can still leave your details and we&apos;ll let you know.
+                    </div>
+                  )}
+
+                  <h2 className="mt-5 text-sm font-semibold tracking-wide text-zinc-500">What do you need done?</h2>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {services.map((s) => {
+                      const on = !!selected[s.id];
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => toggleService(s)}
+                          aria-pressed={on}
+                          className={`rounded-xl px-3 py-3 text-left text-sm font-medium ring-1 ring-inset ${on ? "accent-bg text-white ring-transparent" : "ring-zinc-300 hover:bg-zinc-50"}`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <ServiceIcon name={s.icon} className="h-4 w-4 shrink-0" />
+                            <span>{s.name}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {selections.length > 0 && (
+                    <div className="mt-5">
+                      <h2 className="text-sm font-semibold tracking-wide text-zinc-500">About your home</h2>
+                      <fieldset className="mt-3">
+                        <legend className="text-sm font-medium">Stories</legend>
+                        <div className="mt-2 grid grid-cols-3 gap-2">
+                          {[1, 2, 3].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => {
+                                setStories(n);
+                                setResult(null);
+                              }}
+                              aria-pressed={stories === n}
+                              className={`rounded-xl px-3 py-2.5 text-sm font-semibold ring-1 ring-inset ${stories === n ? "accent-bg text-white ring-transparent" : "ring-zinc-300 hover:bg-zinc-50"}`}
+                            >
+                              {n === 3 ? "3+" : n}
+                            </button>
                           ))}
                         </div>
+                      </fieldset>
+
+                      {sizeSource === "solar" && !adjusting && estimatedLiving ? (
+                        <div className="mt-4 rounded-xl bg-zinc-50 p-4">
+                          <p className="text-sm text-zinc-600">From satellite imagery, your home is about</p>
+                          <p className="mt-1 text-2xl font-bold">{estimatedLiving.toLocaleString()} sq ft</p>
+                          <button type="button" onClick={() => useSlider(estimatedLiving)} className="accent-text mt-2 text-sm font-medium underline underline-offset-2">
+                            Adjust size
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="mt-4 block text-sm">
+                          <span className="flex items-baseline justify-between font-medium">
+                            Home size
+                            <span className="text-base font-bold">{Math.round(sliderValue).toLocaleString()} sq ft</span>
+                          </span>
+                          <input
+                            type="range"
+                            min={SIZE_MIN}
+                            max={SIZE_MAX}
+                            step={SIZE_STEP}
+                            value={clampSize(sliderValue)}
+                            aria-valuetext={`${Math.round(sliderValue)} square feet`}
+                            onChange={(e) => useSlider(Number(e.target.value))}
+                            className="mt-2 w-full accent-[var(--accent)]"
+                          />
+                          {measured?.source === "solar" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdjusting(false);
+                                setSizeSource("solar");
+                                setLivingSqft(null);
+                                setResult(null);
+                              }}
+                              className="mt-1 text-sm text-zinc-500 underline underline-offset-2"
+                            >
+                              Use the satellite estimate
+                            </button>
+                          )}
+                        </label>
+                      )}
+
+                      {showSiding && (
+                        <label className="mt-4 block text-sm">
+                          <span className="font-medium">Siding</span>
+                          <select
+                            value={siding}
+                            onChange={(e) => {
+                              setSiding(e.target.value as SidingType);
+                              setResult(null);
+                            }}
+                            className="accent-ring mt-1 block w-full rounded-lg border-0 px-3 py-2.5 ring-1 ring-inset ring-zinc-300"
+                          >
+                            {SIDING_TYPES.map((id) => (
+                              <option key={id} value={id}>
+                                {SIDING_LABELS[id]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {showStaining && (
+                        <label className="mt-3 flex items-center gap-2 text-sm">
+                          <input type="checkbox" checked={staining} onChange={(e) => { setStaining(e.target.checked); setResult(null); }} className="h-4 w-4 rounded" style={{ accentColor: accent }} />
+                          Visible green or black staining
+                        </label>
+                      )}
+                      {showGutters && (
+                        <label className="mt-3 flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={neglectedGutters}
+                            onChange={(e) => {
+                              setNeglectedGutters(e.target.checked);
+                              setResult(null);
+                            }}
+                            className="h-4 w-4 rounded"
+                            style={{ accentColor: accent }}
+                          />
+                          Gutters haven&apos;t been cleaned in years
+                        </label>
+                      )}
+                    </div>
+                  )}
+
+                  {detailServices.length > 0 && (
+                    <div className="mt-4 space-y-3">
+                      {detailServices.map((s) => {
+                        const sel = selected[s.id];
+                        if (!sel) return null;
+                        return (
+                          <div key={s.id} className="rounded-xl bg-zinc-50 px-3 py-3">
+                            <p className="text-sm font-medium">{s.name}</p>
+                            {s.unit === "flat_sqft" && (
+                              <label className="mt-2 block text-sm">
+                                <span className="text-zinc-600">Size</span>
+                                <select
+                                  value={sel.sizeOptionId ?? ""}
+                                  onChange={(e) => updateSelection(s.id, { sizeOptionId: e.target.value })}
+                                  className="accent-ring mt-1 block w-full rounded-lg border-0 bg-white px-3 py-2 ring-1 ring-inset ring-zinc-300"
+                                >
+                                  {s.sizeOptions?.map((o) => (
+                                    <option key={o.id} value={o.id}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            )}
+                            {s.unit === "window" && (
+                              <label className="mt-2 block text-sm">
+                                <span className="text-zinc-600">Number of windows</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={300}
+                                  inputMode="numeric"
+                                  value={sel.quantity ?? ""}
+                                  onChange={(e) => updateSelection(s.id, { quantity: Math.max(0, Number(e.target.value) || 0) })}
+                                  className="accent-ring mt-1 block w-28 rounded-lg border-0 bg-white px-3 py-2 ring-1 ring-inset ring-zinc-300"
+                                />
+                              </label>
+                            )}
+                            {s.addons?.map((a) => (
+                              <label key={a.id} className="mt-2 flex items-center gap-2 text-sm">
+                                <input type="checkbox" checked={!!sel.addons?.some((x) => x.id === a.id)} onChange={() => toggleAddon(s.id, a.id)} className="h-4 w-4 rounded" style={{ accentColor: accent }} />
+                                <span className="flex-1">{a.name}</span>
+                                {canShowLive && <span className="text-zinc-500">{a.unit === "flat" ? `+${money(a.price)}` : `+${money(a.price)} each`}</span>}
+                              </label>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {canShowLive && live && live.lines.length > 0 && (
+                    <div className="mt-4 flex items-center justify-between rounded-xl bg-zinc-50 px-4 py-3">
+                      <div>
+                        <p className="text-xs text-zinc-500">Estimated total</p>
+                        <p className="text-lg font-bold">{priceLabel(live)}</p>
+                      </div>
+                      {live.discount ? (
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">You save {money(live.discount.amount)}</span>
+                      ) : live.bundleNudge ? (
+                        <span className="max-w-[55%] text-right text-xs font-medium text-emerald-700">{live.bundleNudge.label}</span>
                       ) : null}
                     </div>
-                  );
-                })}
-              </div>
+                  )}
 
-              {canShowLive && live && live.lines.length > 0 && (
-                <div className="mt-4 flex items-center justify-between rounded-xl bg-zinc-50 px-4 py-3">
-                  <div>
-                    <p className="text-xs text-zinc-500">Estimated total</p>
-                    <p className="text-lg font-bold">{priceLabel(live)}</p>
-                  </div>
-                  {live.discount ? (
-                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">You save {money(live.discount.amount)}</span>
-                  ) : live.bundleNudge ? (
-                    <span className="max-w-[55%] text-right text-xs font-medium text-emerald-700">{live.bundleNudge.label}</span>
-                  ) : null}
-                </div>
+                  <PrimaryButton className="mt-4 w-full" busy={busy} disabled={!selections.length} onClick={() => void getQuote()}>
+                    {busy ? "Working…" : canShowLive ? "See the price" : "Continue"}
+                  </PrimaryButton>
+                </>
               )}
-
-              <NavRow
-                onBack={() => setStep("size")}
-                onNext={() => {
-                  if (!selections.length) return setError("Pick at least one service");
-                  setError(null);
-                  void getQuote();
-                }}
-                nextLabel={canShowLive ? "See my price" : "Continue"}
-                busy={busy}
-              />
             </section>
           )}
 
           {step === "price" && result && (
             <section>
-              <p className="text-sm text-zinc-500">Your price</p>
-              <p className="mt-1 text-4xl font-extrabold tracking-tight">{priceLabel(result)}</p>
-              {result.needsOnsiteConfirmation && <p className="mt-1 text-sm text-amber-700">Part of this job needs a quick look on site to confirm.</p>}
-              <ul className="mt-5 divide-y divide-zinc-100 border-y border-zinc-100 text-sm">
-                {result.lines.map((l) => (
-                  <li key={l.serviceId} className="py-2.5">
-                    <div className="flex justify-between gap-4">
-                      <span className="font-medium">{l.name}</span>
+              <p className="text-center text-sm text-zinc-500">{result.needsOnsiteConfirmation ? "Instant price · confirmed on-site" : "Instant price"}</p>
+              <p data-testid="quote-total" className="mt-1 text-center text-5xl font-extrabold tracking-tight">
+                {priceLabel(result)}
+              </p>
+              {result.needsOnsiteConfirmation && <p className="mt-2 text-center text-sm text-amber-700">We&apos;ll confirm this on site. You still get the price and the request goes through.</p>}
+              <button type="button" onClick={() => setShowLines((v) => !v)} className="accent-text mt-4 block w-full text-center text-sm font-medium underline underline-offset-2">
+                {showLines ? "Hide what's included" : "See what's included"}
+              </button>
+              {showLines && (
+                <ul className="mt-3 divide-y divide-zinc-100 border-y border-zinc-100 text-sm">
+                  {result.lines.map((l) => (
+                    <li key={l.serviceId} className="flex justify-between gap-4 py-2.5">
+                      <span>
+                        <span className="block font-medium">{l.name}</span>
+                        <span className="text-xs text-zinc-500">{l.measureLabel}</span>
+                      </span>
                       <span>{money(l.total)}</span>
-                    </div>
-                    <p className="text-xs text-zinc-500">
-                      {l.measureLabel}
-                      {l.addons.length ? ` · ${l.addons.map((a) => a.name).join(", ")}` : ""}
-                    </p>
-                  </li>
-                ))}
-                {result.discount && (
-                  <li className="flex justify-between py-2.5 font-medium text-emerald-700">
-                    <span>{result.discount.name}</span>
-                    <span>−{money(result.discount.amount)}</span>
-                  </li>
-                )}
-              </ul>
-              {result.bundleNudge && (
-                <button type="button" onClick={() => setStep("services")} className="mt-3 w-full rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-                  {result.bundleNudge.label}
-                </button>
+                    </li>
+                  ))}
+                  {result.discount && (
+                    <li className="flex justify-between py-2.5 font-medium text-emerald-700">
+                      <span>{result.discount.name}</span>
+                      <span>−{money(result.discount.amount)}</span>
+                    </li>
+                  )}
+                </ul>
               )}
-              <p className="mt-3 text-xs text-zinc-500">Estimate based on your address and answers. The final price is confirmed on site.</p>
-              <NavRow onBack={() => setStep("services")} onNext={() => setStep("form")} nextLabel="Request this booking" />
+              <p className="mt-3 text-center text-xs text-zinc-500">Final price is confirmed on site before any work.</p>
+              <PrimaryButton className="mt-4 w-full" onClick={() => setStep("book")}>
+                Book this job
+              </PrimaryButton>
+              <button type="button" onClick={() => setStep("book")} className="mt-2 w-full py-2 text-sm font-medium text-zinc-600 underline underline-offset-2">
+                Email me this price instead
+              </button>
+              <button type="button" onClick={() => setStep("details")} className="mt-1 w-full py-2 text-sm text-zinc-500">
+                ← Change details
+              </button>
             </section>
           )}
 
-          {step === "form" && (
+          {step === "book" && (
             <form onSubmit={submitLead}>
-              <h2 className="text-xl font-bold">{showPrice ? "Request your booking" : "Get your quote"}</h2>
+              <h2 className="text-xl font-bold">{showPrice ? "Book this job" : "Get your quote"}</h2>
               <p className="mt-1 text-sm text-zinc-500">
                 {showPrice
                   ? `${config.name} will contact you to confirm a time. This is a request, not a confirmed booking.`
@@ -699,12 +758,11 @@ export function QuoteFlow({
                     ? `Leave your details and ${config.name} will let you know if they can help.`
                     : `Leave your details and ${config.name} will send your price shortly.`}
               </p>
+              {result && showPrice && <p className="mt-3 text-2xl font-bold">{priceLabel(result)}</p>}
               <div className="mt-4 grid gap-3">
                 <TextField label="Full name" autoComplete="name" required value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <TextField label="Mobile phone" type="tel" autoComplete="tel" required value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
-                  <TextField label="Email" type="email" autoComplete="email" required value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
-                </div>
+                <TextField label="Mobile phone" type="tel" autoComplete="tel" required placeholder="(813) 555-0142" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
+                <TextField label="Email" type="email" autoComplete="email" required value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
                 <label className="block text-sm">
                   <span className="font-medium">Best time for the job</span>
                   <select
@@ -717,32 +775,35 @@ export function QuoteFlow({
                     ))}
                   </select>
                 </label>
-                <label className="block text-sm">
-                  <span className="font-medium">Anything we should know?</span> <span className="text-zinc-400">(optional)</span>
-                  <textarea
-                    rows={3}
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    maxLength={2000}
-                    className="accent-ring mt-1 block w-full rounded-lg border-0 px-3 py-2 ring-1 ring-inset ring-zinc-300"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <span className="font-medium">Photos</span> <span className="text-zinc-400">(optional, up to 5)</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => {
-                      const files = Array.from(e.target.files ?? []).slice(0, 5);
-                      if (files.some((f) => f.size > 8 * 1024 * 1024)) return setError("Each photo must be under 8 MB");
-                      setError(null);
-                      setPhotos(files);
-                    }}
-                    className="mt-1 block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium"
-                  />
-                  {photos.length > 0 && <span className="mt-1 block text-xs text-zinc-500">{photos.length} photo(s) selected</span>}
-                </label>
+                <details className="text-sm">
+                  <summary className="cursor-pointer font-medium text-zinc-600">Photos or notes (optional)</summary>
+                  <label className="mt-3 block">
+                    <span className="font-medium">Anything we should know?</span>
+                    <textarea
+                      rows={3}
+                      value={form.notes}
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      maxLength={2000}
+                      className="accent-ring mt-1 block w-full rounded-lg border-0 px-3 py-2 ring-1 ring-inset ring-zinc-300"
+                    />
+                  </label>
+                  <label className="mt-3 block">
+                    <span className="font-medium">Photos</span> <span className="text-zinc-400">(up to 5)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []).slice(0, 5);
+                        if (files.some((f) => f.size > 8 * 1024 * 1024)) return setError("Each photo must be under 8 MB");
+                        setError(null);
+                        setPhotos(files);
+                      }}
+                      className="mt-1 block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium"
+                    />
+                    {photos.length > 0 && <span className="mt-1 block text-xs text-zinc-500">{photos.length} photo(s) selected</span>}
+                  </label>
+                </details>
                 <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
                   <label>
                     Website
@@ -755,14 +816,21 @@ export function QuoteFlow({
                 </label>
                 {turnstileSiteKey && <div ref={turnstileRef} />}
               </div>
-              <NavRow onBack={() => setStep(showPrice ? "price" : "services")} nextLabel={busy ? "Sending…" : "Send request"} busy={busy} submit />
+              <PrimaryButton type="submit" busy={busy} className="mt-4 w-full">
+                {busy ? "Sending…" : showPrice ? "Book this job" : "Send request"}
+              </PrimaryButton>
+              <button type="button" onClick={() => setStep(showPrice ? "price" : "details")} className="mt-2 w-full py-2 text-sm text-zinc-500">
+                ← Back
+              </button>
             </form>
           )}
 
           {step === "done" && (
             <section className="py-6 text-center">
               <div className="accent-bg mx-auto flex h-14 w-14 items-center justify-center rounded-full text-2xl text-white">✓</div>
-              <h2 className="mt-4 text-xl font-bold">Request sent!</h2>
+              <h2 data-testid="quote-sent" className="mt-4 text-xl font-bold">
+                Request sent!
+              </h2>
               <p className="mt-2 text-sm text-zinc-600">
                 {config.name} will contact you shortly to confirm{showPrice ? " your booking" : " your price"}. We emailed you a summary.
               </p>
@@ -794,27 +862,13 @@ export function QuoteFlow({
 function PrimaryButton({ className = "", busy, children, ...p }: React.ButtonHTMLAttributes<HTMLButtonElement> & { busy?: boolean }) {
   return (
     <button
+      type="button"
       {...p}
       disabled={busy || p.disabled}
-      className={`accent-bg accent-ring inline-flex items-center justify-center rounded-xl px-5 py-3 font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 ${className}`}
+      className={`accent-bg accent-ring inline-flex items-center justify-center rounded-xl px-5 py-3 font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
     >
       {children}
     </button>
-  );
-}
-
-function NavRow({ onBack, onNext, nextLabel, busy, submit }: { onBack?: () => void; onNext?: () => void; nextLabel: string; busy?: boolean; submit?: boolean }) {
-  return (
-    <div className="mt-6 flex items-center gap-3">
-      {onBack && (
-        <button type="button" onClick={onBack} className="rounded-xl px-4 py-3 text-sm font-medium text-zinc-600 hover:bg-zinc-100">
-          Back
-        </button>
-      )}
-      <PrimaryButton type={submit ? "submit" : "button"} onClick={submit ? undefined : onNext} busy={busy} className="flex-1">
-        {busy && !submit ? "Working…" : nextLabel}
-      </PrimaryButton>
-    </div>
   );
 }
 
@@ -824,10 +878,11 @@ function TextField({
   onChange,
   ...p
 }: { label: string; value: string; onChange: (v: string) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
+  const id = p.id ?? label.toLowerCase().replace(/\s+/g, "-");
   return (
-    <label className="block text-sm">
+    <label className="block text-sm" htmlFor={id}>
       <span className="font-medium">{label}</span>
-      <input {...p} value={value} onChange={(e) => onChange(e.target.value)} className="accent-ring mt-1 block w-full rounded-lg border-0 px-3 py-2.5 ring-1 ring-inset ring-zinc-300 focus:ring-2" />
+      <input id={id} {...p} value={value} onChange={(e) => onChange(e.target.value)} className="accent-ring mt-1 block w-full rounded-lg border-0 px-3 py-2.5 ring-1 ring-inset ring-zinc-300 focus:ring-2" />
     </label>
   );
 }

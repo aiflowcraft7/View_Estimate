@@ -377,6 +377,28 @@ function ServiceCard({
                 Size typed by homeowner
               </label>
             </div>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+              <label className="flex items-center gap-2 text-xs text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={!!s.confirmOnsite?.sidingOnsite?.includes("stucco")}
+                  onChange={(e) => onChange({ confirmOnsite: { ...s.confirmOnsite, sidingOnsite: e.target.checked ? ["stucco"] : undefined } })}
+                />
+                Stucco siding
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-600">
+                <input type="checkbox" checked={!!s.confirmOnsite?.onStaining} onChange={(e) => onChange({ confirmOnsite: { ...s.confirmOnsite, onStaining: e.target.checked || undefined } })} />
+                Visible staining
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={!!s.confirmOnsite?.onNeglectedGutters}
+                  onChange={(e) => onChange({ confirmOnsite: { ...s.confirmOnsite, onNeglectedGutters: e.target.checked || undefined } })}
+                />
+                Gutters not cleaned in years
+              </label>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-4">

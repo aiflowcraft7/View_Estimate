@@ -45,7 +45,7 @@ export default async function SettingsPage() {
           <p className="mt-1 text-sm text-zinc-600">
             To delete your account and all lead data, email <a className="text-brand-700 underline" href={`mailto:${env.supportEmail}`}>{env.supportEmail}</a>.
           </p>
-          <form action="/logout" method="post" className="mt-3">
+          <form action="/api/logout" method="post" className="mt-3">
             <button className="text-sm font-medium text-zinc-700 underline">Sign out</button>
           </form>
         </Card>

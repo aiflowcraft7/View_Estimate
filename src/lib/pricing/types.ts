@@ -24,6 +24,16 @@ export type Addon = {
   price: number;
 };
 
+export const SIDING_TYPES = ["vinyl", "brick", "hardie", "stucco"] as const;
+export type SidingType = (typeof SIDING_TYPES)[number];
+
+export const SIDING_LABELS: Record<SidingType, string> = {
+  vinyl: "Vinyl",
+  brick: "Brick",
+  hardie: "Hardie board",
+  stucco: "Stucco",
+};
+
 export type ConfirmOnsiteRules = {
   /** Above this many stories, the price must be confirmed on site. */
   maxStories?: number;
@@ -31,6 +41,12 @@ export type ConfirmOnsiteRules = {
   maxLivingSqft?: number;
   /** When true, any manual size override forces on-site confirmation. */
   onManualSize?: boolean;
+  /** Siding types that cannot be priced exactly, e.g. ["stucco"]. */
+  sidingOnsite?: SidingType[];
+  /** Visible organic staining is confirmed on site. */
+  onStaining?: boolean;
+  /** Gutters that have not been cleaned in years are confirmed on site. */
+  onNeglectedGutters?: boolean;
 };
 
 export type ServiceConfig = {
@@ -96,6 +112,11 @@ export type PropertyFacts = {
   livingSqft?: number | null;
   stories: number;
   source: SizeSource;
+  siding?: SidingType | null;
+  /** Homeowner reported green or black organic staining. */
+  staining?: boolean;
+  /** Homeowner said the gutters have not been cleaned in years. */
+  neglectedGutters?: boolean;
 };
 
 export type ServiceSelection = {

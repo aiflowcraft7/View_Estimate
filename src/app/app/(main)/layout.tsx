@@ -80,7 +80,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 Admin console
               </Link>
             )}
-            <form action="/logout" method="post" className="mt-2">
+            <form action="/api/logout" method="post" className="mt-2">
               <button className="text-zinc-600 hover:text-zinc-900">Sign out</button>
             </form>
           </div>

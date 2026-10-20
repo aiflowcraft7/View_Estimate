@@ -9,6 +9,7 @@ export type SendResult = { ok: true; id: string; simulated: boolean } | { ok: fa
 /** Sends through Resend, or saves to the dev outbox (/dev/outbox) when RESEND_API_KEY is missing. */
 export async function sendEmail(msg: EmailMessage): Promise<SendResult> {
   if (!env.resendKey) {
+    if (env.runtimeProduction) return { ok: false, error: "Email is not configured", retryable: false };
     const db = await getDb();
     const [row] = await db
       .insert(devOutbox)

@@ -1,9 +1,9 @@
 import "server-only";
 import { env } from "./env";
 
-/** Verifies a Cloudflare Turnstile token. Passes automatically when Turnstile isn't configured. */
+/** Verifies a Cloudflare Turnstile token. Local dev passes when it isn't configured; production does not. */
 export async function verifyTurnstile(token: string | null | undefined, ip?: string): Promise<boolean> {
-  if (!env.turnstileSecret) return true;
+  if (!env.turnstileSecret) return !env.runtimeProduction;
   if (!token) return false;
   try {
     const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {

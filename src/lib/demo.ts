@@ -2,7 +2,31 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { businesses } from "./db/schema";
-import { DEFAULT_PRICING } from "./pricing/templates";
+import { DEFAULT_PRICING, SERVICE_TEMPLATES } from "./pricing/templates";
+import type { PricingConfig, ServiceConfig } from "./pricing/types";
+
+/** Adds on-site rules introduced after a demo row was first saved, without touching rates. */
+function backfillOnsiteRules(pricing: PricingConfig): PricingConfig | null {
+  let changed = false;
+  const services = pricing.services.map((service) => {
+    const next = mergeOnsite(service);
+    if (next !== service) changed = true;
+    return next;
+  });
+  return changed ? { ...pricing, services } : null;
+}
+
+function mergeOnsite(service: ServiceConfig): ServiceConfig {
+  const extra = SERVICE_TEMPLATES.find((t) => t.id === service.id)?.confirmOnsite;
+  if (!extra) return service;
+  const current = service.confirmOnsite ?? {};
+  const patch: NonNullable<ServiceConfig["confirmOnsite"]> = {};
+  if (extra.sidingOnsite?.length && current.sidingOnsite === undefined) patch.sidingOnsite = extra.sidingOnsite;
+  if (extra.onStaining === true && current.onStaining === undefined) patch.onStaining = true;
+  if (extra.onNeglectedGutters === true && current.onNeglectedGutters === undefined) patch.onNeglectedGutters = true;
+  if (Object.keys(patch).length === 0) return service;
+  return { ...service, confirmOnsite: { ...current, ...patch } };
+}
 
 export const DEMO_SLUG = "demo";
 
@@ -10,7 +34,12 @@ export const DEMO_SLUG = "demo";
 export async function ensureDemoBusiness() {
   const db = await getDb();
   const [existing] = await db.select().from(businesses).where(eq(businesses.slug, DEMO_SLUG)).limit(1);
-  if (existing) return existing;
+  if (existing) {
+    const pricing = backfillOnsiteRules(existing.pricing);
+    if (!pricing) return existing;
+    const [updated] = await db.update(businesses).set({ pricing, updatedAt: new Date() }).where(eq(businesses.id, existing.id)).returning();
+    return updated ?? existing;
+  }
   const [b] = await db
     .insert(businesses)
     .values({

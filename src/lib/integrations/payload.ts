@@ -27,6 +27,9 @@ export type LeadPayload = {
     priceText: string;
     displayMode: string | null;
     needsOnsiteConfirmation: boolean;
+    siding: string | null;
+    staining: boolean;
+    neglectedGutters: boolean;
     services: { id: string; name: string; measure: string; total: number }[];
     discount: { name: string; amount: number } | null;
     sizeSource: string | null;
@@ -55,7 +58,7 @@ export function splitAddress(address: string | null): { street: string | null; c
 
 export function buildLeadPayload(input: {
   lead: { id: string; createdAt: Date; name: string; phone: string; email: string; address: string | null; notes: string | null; preferredWindow: string | null; smsConsent: boolean; photos: string[]; total: number | null };
-  quote: { id: string; result: QuoteResult; property: { source: string } } | null;
+  quote: { id: string; result: QuoteResult; property: { source: string; siding?: string | null; staining?: boolean; neglectedGutters?: boolean } } | null;
   business: { id: string; name: string; slug: string };
   leadUrl: string;
   priceText: string;
@@ -85,6 +88,9 @@ export function buildLeadPayload(input: {
       priceText: input.priceText,
       displayMode: quote?.result.displayMode ?? null,
       needsOnsiteConfirmation: quote?.result.needsOnsiteConfirmation ?? false,
+      siding: quote?.property.siding ?? null,
+      staining: !!quote?.property.staining,
+      neglectedGutters: !!quote?.property.neglectedGutters,
       services: (quote?.result.lines ?? []).map((l) => ({ id: l.serviceId, name: l.name, measure: l.measureLabel, total: l.total })),
       discount: quote?.result.discount ? { name: quote.result.discount.name, amount: quote.result.discount.amount } : null,
       sizeSource: quote?.property.source ?? null,
@@ -110,6 +116,9 @@ export function flattenForGhl(p: LeadPayload): Record<string, string | number | 
     quote_price_text: p.quote.priceText,
     quote_services: p.quote.services.map((s) => `${s.name} ($${s.total})`).join(", "),
     needs_onsite_confirmation: p.quote.needsOnsiteConfirmation,
+    siding: p.quote.siding,
+    visible_staining: p.quote.staining,
+    neglected_gutters: p.quote.neglectedGutters,
     preferred_time: p.lead.preferredWindow,
     notes: p.lead.notes,
     sms_consent: p.lead.smsConsent,

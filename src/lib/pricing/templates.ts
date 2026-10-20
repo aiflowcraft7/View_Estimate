@@ -15,7 +15,7 @@ export const SERVICE_TEMPLATES: ServiceConfig[] = [
     rate: 0.22,
     minPrice: 249,
     storyMultipliers: { "1": 1, "2": 1.6, "3": 2.1 },
-    confirmOnsite: { maxStories: 3, maxLivingSqft: 6000 },
+    confirmOnsite: { maxStories: 3, maxLivingSqft: 6000, sidingOnsite: ["stucco"], onStaining: true },
     addons: [
       { id: "rust_removal", name: "Rust stain removal", unit: "flat", price: 75 },
       { id: "fence", name: "Fence wash", unit: "flat", price: 125 },
@@ -93,7 +93,7 @@ export const SERVICE_TEMPLATES: ServiceConfig[] = [
     gutterFactor: 0.9,
     minPrice: 149,
     storyMultipliers: { "1": 1, "2": 1.25, "3": 1.6 },
-    confirmOnsite: { maxStories: 3 },
+    confirmOnsite: { maxStories: 3, onNeglectedGutters: true },
   },
   {
     id: "gutter_brightening",
@@ -105,6 +105,7 @@ export const SERVICE_TEMPLATES: ServiceConfig[] = [
     gutterFactor: 0.9,
     minPrice: 199,
     storyMultipliers: { "1": 1, "2": 1.2, "3": 1.5 },
+    confirmOnsite: { onNeglectedGutters: true },
   },
 ];
 
@@ -123,6 +124,9 @@ export function templateFor(ids: string[]): PricingConfig {
     services: SERVICE_TEMPLATES.filter((s) => ids.includes(s.id)).map((s) => structuredClone(s)),
   };
 }
+
+/** Starting point for the home-size slider when satellite data is missing. */
+export const DEFAULT_HOME_SQFT = 2000;
 
 export const HOME_SIZE_BANDS = [
   { id: "under_1500", label: "Under 1,500 sq ft", sqft: 1200 },

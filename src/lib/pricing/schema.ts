@@ -30,6 +30,9 @@ export const serviceSchema = z.object({
       maxStories: z.number().int().min(1).max(10).optional(),
       maxLivingSqft: z.number().positive().optional(),
       onManualSize: z.boolean().optional(),
+      sidingOnsite: z.array(z.enum(["vinyl", "brick", "hardie", "stucco"])).max(4).optional(),
+      onStaining: z.boolean().optional(),
+      onNeglectedGutters: z.boolean().optional(),
     })
     .optional(),
 });
@@ -75,6 +78,9 @@ export const propertySchema = z.object({
   livingSqft: z.number().nonnegative().max(200000).nullable().optional(),
   stories: z.number().int().min(1).max(10),
   source: z.enum(["solar", "manual", "band", "none"]),
+  siding: z.enum(["vinyl", "brick", "hardie", "stucco"]).nullable().optional(),
+  staining: z.boolean().optional(),
+  neglectedGutters: z.boolean().optional(),
 });
 
 export const selectionsSchema = z

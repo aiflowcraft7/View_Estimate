@@ -1,19 +1,15 @@
 import "server-only";
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { asc, eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { randomToken, sha256 } from "./crypto";
 import { getDb } from "./db";
-import { auditLog, businesses, loginTokens, memberships, sessions, users } from "./db/schema";
+import { auditLog, businesses, memberships, users } from "./db/schema";
 import { env } from "./env";
-import { sendEmail } from "./messaging/email";
-import { magicLinkEmail } from "./messaging/templates";
 
-const SESSION_COOKIE = "ve_session";
 const BUSINESS_COOKIE = "ve_business";
-const SESSION_DAYS = 30;
-const MAGIC_MINUTES = 20;
+const ACTING_COOKIE = "ve_acting_business";
 
 export type User = typeof users.$inferSelect;
 export type Business = typeof businesses.$inferSelect;
@@ -28,86 +24,88 @@ export function safeNext(next: string | null | undefined, fallback = "/app"): st
   return next;
 }
 
-export async function requestMagicLink(emailRaw: string, next?: string): Promise<void> {
-  const email = normalizeEmail(emailRaw);
-  const token = randomToken();
-  const db = await getDb();
-  await db.insert(loginTokens).values({
-    tokenHash: sha256(token),
-    email,
-    redirectTo: safeNext(next),
-    expiresAt: new Date(Date.now() + MAGIC_MINUTES * 60_000),
-  });
-  const url = `${env.appUrl}/auth/verify?token=${encodeURIComponent(token)}`;
-  const res = await sendEmail(magicLinkEmail(email, url));
-  if (!res.ok) throw new Error(`Could not send sign-in email: ${res.error}`);
+function primaryEmail(clerkUser: NonNullable<Awaited<ReturnType<typeof currentUser>>>): string | null {
+  const id = clerkUser.primaryEmailAddressId;
+  const found = clerkUser.emailAddresses.find((e) => e.id === id)?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress;
+  return found ? normalizeEmail(found) : null;
 }
 
-/** Consumes a magic link token. Returns the redirect target, or null if invalid/expired/used. */
-export async function consumeMagicLink(token: string): Promise<string | null> {
-  const db = await getDb();
-  const rows = await db
-    .update(loginTokens)
-    .set({ usedAt: new Date() })
-    .where(and(eq(loginTokens.tokenHash, sha256(token)), isNull(loginTokens.usedAt), gt(loginTokens.expiresAt, new Date())))
-    .returning();
-  const row = rows[0];
-  if (!row) return null;
-  const user = await upsertUser(row.email);
-  await createSession(user.id);
-  return row.redirectTo ?? "/app";
+function displayName(clerkUser: NonNullable<Awaited<ReturnType<typeof currentUser>>>): string | null {
+  const n = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ").trim();
+  return n || clerkUser.username || null;
 }
 
-export async function upsertUser(emailRaw: string, name?: string | null): Promise<User> {
+/** Links Clerk identity to our users row (by clerk id, then email). */
+export async function upsertUser(emailRaw: string, name?: string | null, clerkUserId?: string | null): Promise<User> {
   const email = normalizeEmail(emailRaw);
   const db = await getDb();
   const isAdmin = env.adminEmails.includes(email);
+
+  if (clerkUserId) {
+    const byClerk = await db.select().from(users).where(eq(users.clerkUserId, clerkUserId)).limit(1);
+    if (byClerk[0]) {
+      const [user] = await db
+        .update(users)
+        .set({
+          email,
+          name: name ?? byClerk[0].name,
+          lastLoginAt: new Date(),
+          ...(isAdmin ? { isPlatformAdmin: true } : {}),
+        })
+        .where(eq(users.id, byClerk[0].id))
+        .returning();
+      return user;
+    }
+  }
+
   const [user] = await db
     .insert(users)
-    .values({ email, name: name ?? null, isPlatformAdmin: isAdmin, lastLoginAt: new Date() })
-    .onConflictDoUpdate({ target: users.email, set: { lastLoginAt: new Date(), ...(isAdmin ? { isPlatformAdmin: true } : {}) } })
+    .values({
+      email,
+      name: name ?? null,
+      clerkUserId: clerkUserId ?? null,
+      isPlatformAdmin: isAdmin,
+      lastLoginAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: users.email,
+      set: {
+        lastLoginAt: new Date(),
+        ...(clerkUserId ? { clerkUserId } : {}),
+        ...(name ? { name } : {}),
+        ...(isAdmin ? { isPlatformAdmin: true } : {}),
+      },
+    })
     .returning();
   return user;
 }
 
-export async function createSession(userId: string): Promise<void> {
-  const token = randomToken();
+export async function deleteUserByClerkId(clerkUserId: string): Promise<void> {
   const db = await getDb();
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400_000);
-  await db.insert(sessions).values({ id: sha256(token), userId, expiresAt });
-  const jar = await cookies();
-  jar.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: env.appUrl.startsWith("https://"),
-    sameSite: "lax",
-    path: "/",
-    expires: expiresAt,
-  });
+  await db.delete(users).where(eq(users.clerkUserId, clerkUserId));
 }
 
-export async function destroySession(): Promise<void> {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (token) {
-    const db = await getDb();
-    await db.delete(sessions).where(eq(sessions.id, sha256(token)));
-  }
-  jar.delete(SESSION_COOKIE);
-  jar.delete(BUSINESS_COOKIE);
+async function resolveAppUser(clerkUserId: string): Promise<User | null> {
+  const clerkUser = await currentUser();
+  if (!clerkUser || clerkUser.id !== clerkUserId) return null;
+  const email = primaryEmail(clerkUser);
+  if (!email) return null;
+  return upsertUser(email, displayName(clerkUser), clerkUserId);
 }
 
-export const getSession = cache(async () => {
+export type AppSession = {
+  user: User;
+  actingBusinessId: string | null;
+};
+
+export const getSession = cache(async (): Promise<AppSession | null> => {
+  const { userId } = await auth();
+  if (!userId) return null;
+  const user = await resolveAppUser(userId);
+  if (!user) return null;
   const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  const db = await getDb();
-  const rows = await db
-    .select({ session: sessions, user: users })
-    .from(sessions)
-    .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.id, sha256(token)), gt(sessions.expiresAt, new Date())))
-    .limit(1);
-  return rows[0] ?? null;
+  const actingBusinessId = jar.get(ACTING_COOKIE)?.value ?? null;
+  return { user, actingBusinessId };
 });
 
 export async function requireUser(next = "/app"): Promise<User> {
@@ -148,8 +146,8 @@ export const getBusinessContext = cache(async (): Promise<BusinessContext | null
     .where(eq(memberships.userId, s.user.id))
     .orderBy(asc(memberships.createdAt));
 
-  if (s.user.isPlatformAdmin && s.session.actingBusinessId) {
-    const [b] = await db.select().from(businesses).where(eq(businesses.id, s.session.actingBusinessId)).limit(1);
+  if (s.user.isPlatformAdmin && s.actingBusinessId) {
+    const [b] = await db.select().from(businesses).where(eq(businesses.id, s.actingBusinessId)).limit(1);
     if (b) return { user: s.user, business: b, role: "admin", actingAsAdmin: true, memberships: mine };
   }
 
@@ -174,13 +172,15 @@ export async function setActiveBusiness(businessId: string): Promise<void> {
   jar.set(BUSINESS_COOKIE, businessId, { httpOnly: true, sameSite: "lax", path: "/", secure: env.appUrl.startsWith("https://") });
 }
 
-/** Admin "act as": switches the admin's session to a business and records it. */
+/** Admin "act as": switches context to a business and records it. */
 export async function startActingAs(admin: User, businessId: string | null): Promise<void> {
+  if (!admin.isPlatformAdmin) throw new Error("Not allowed");
   const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (!token || !admin.isPlatformAdmin) throw new Error("Not allowed");
-  const db = await getDb();
-  await db.update(sessions).set({ actingBusinessId: businessId }).where(eq(sessions.id, sha256(token)));
+  if (businessId) {
+    jar.set(ACTING_COOKIE, businessId, { httpOnly: true, sameSite: "lax", path: "/", secure: env.appUrl.startsWith("https://") });
+  } else {
+    jar.delete(ACTING_COOKIE);
+  }
   await audit(admin.id, businessId, businessId ? "admin.act_as.start" : "admin.act_as.stop");
 }
 

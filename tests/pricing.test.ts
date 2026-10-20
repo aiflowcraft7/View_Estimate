@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { samplePrice, scaleService } from "@/lib/pricing/calibrate";
 import { livingSqft, priceQuote, roundTo } from "@/lib/pricing/engine";
 import { DEFAULT_PRICING, SERVICE_TEMPLATES, templateFor } from "@/lib/pricing/templates";
 import { pricingConfigSchema } from "@/lib/pricing/schema";
@@ -211,6 +212,34 @@ describe("confirm on site, range and rounding", () => {
   it("flags manual sizes when configured", () => {
     const r = priceQuote(cfg([svc({ unit: "living_sqft", rate: 0.1, confirmOnsite: { onManualSize: true } })]), { ...home, source: "manual" }, [{ serviceId: "s" }]);
     expect(r.lines[0].confirmOnsite).toBe(true);
+  });
+  it("flags stucco, staining and neglected gutters without changing the price", () => {
+    const base = { ...home, siding: "vinyl" as const };
+    const house = svc({ unit: "house_sqft", rate: 0.2, confirmOnsite: { sidingOnsite: ["stucco"], onStaining: true } });
+    const vinyl = priceQuote(cfg([house]), base, [{ serviceId: "s" }]);
+    const stucco = priceQuote(cfg([house]), { ...base, siding: "stucco" }, [{ serviceId: "s" }]);
+    const stained = priceQuote(cfg([house]), { ...base, staining: true }, [{ serviceId: "s" }]);
+    expect(vinyl.needsOnsiteConfirmation).toBe(false);
+    expect(stucco.needsOnsiteConfirmation).toBe(true);
+    expect(stucco.total).toBe(vinyl.total);
+    expect(stained.needsOnsiteConfirmation).toBe(true);
+    expect(stained.total).toBe(vinyl.total);
+    expect(stucco.lines[0].notes.some((n) => n.includes("Stucco"))).toBe(true);
+
+    const gutter = svc({ unit: "gutter_lf", rate: 1.25, confirmOnsite: { onNeglectedGutters: true } });
+    const clean = priceQuote(cfg([gutter]), home, [{ serviceId: "s" }]);
+    const neglected = priceQuote(cfg([gutter]), { ...home, neglectedGutters: true }, [{ serviceId: "s" }]);
+    expect(clean.needsOnsiteConfirmation).toBe(false);
+    expect(neglected.needsOnsiteConfirmation).toBe(true);
+    expect(neglected.total).toBe(clean.total);
+  });
+  it("scales a sample job onto a new price", () => {
+    const house = SERVICE_TEMPLATES.find((s) => s.id === "house_wash")!;
+    const before = samplePrice(house);
+    const doubled = scaleService(house, before * 2);
+    expect(samplePrice(doubled)).toBe(before * 2);
+    expect(doubled.rate).toBeGreaterThan(house.rate);
+    expect(doubled.minPrice).toBeGreaterThan(house.minPrice ?? 0);
   });
   it("flags missing sizes", () => {
     const r = priceQuote(cfg([svc({ unit: "roof_sqft", rate: 0.3, minPrice: 300 })]), { stories: 1, source: "none" }, [{ serviceId: "s" }]);

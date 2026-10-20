@@ -8,6 +8,7 @@ import { loadLeadContext } from "../lead-context";
 import { sendEmail } from "../messaging/email";
 import { sendSms } from "../messaging/sms";
 import { homeownerConfirmationEmail, leadAlertEmail, leadAlertSms, type LeadAlertData } from "../messaging/templates";
+import { propertySummary } from "../property/facts";
 import { addUsage } from "../usage";
 import { PermanentJobError, registerJob } from "./queue";
 
@@ -51,11 +52,7 @@ export function ensureHandlers() {
       notes: lead.notes,
       photoCount: lead.photos.length,
       sizeSource: quote?.property.source ?? "none",
-      sizeSummary: quote
-        ? [quote.property.livingSqft ? `${quote.property.livingSqft.toLocaleString()} sq ft` : quote.property.footprintSqft ? `${quote.property.footprintSqft.toLocaleString()} sq ft footprint` : null, `${quote.property.stories} ${quote.property.stories === 1 ? "story" : "stories"}`]
-            .filter(Boolean)
-            .join(", ")
-        : "not provided",
+      sizeSummary: quote ? propertySummary(quote.property) : "not provided",
       result: quote?.result ?? { lines: [], subtotal: 0, discount: null, orderMinimumApplied: false, total: lead.total ?? 0, displayMode: "exact", range: null, needsOnsiteConfirmation: true, bundleNudge: null, errors: [] },
     };
 
@@ -68,6 +65,7 @@ export function ensureHandlers() {
         done.add("email");
         await addUsage("email", business.id);
       } else if (r.retryable) errors.push(r.error);
+      else throw new PermanentJobError(r.error);
     }
 
     if (business.smsAlertsEnabled && business.alertPhone && !done.has("sms")) {

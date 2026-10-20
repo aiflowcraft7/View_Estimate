@@ -24,7 +24,7 @@ export default function Privacy() {
       </ul>
       <h2>Who processes it for us</h2>
       <p>
-        We use service providers to run the service: Supabase (database and file storage), Vercel (hosting), Google Maps Platform (address lookup and building size), Twilio (text messages), Resend (email), Paddle (payments), Cloudflare (bot protection) and Sentry (error monitoring). They process data only on our instructions.
+        We use service providers to run the service: Supabase (database and file storage), Clerk (Business sign-in), Vercel (hosting), Google Maps Platform (address lookup and building size), Twilio (text messages), Resend (email), Paddle (payments), Cloudflare (bot protection) and Sentry (error monitoring). They process data only on our instructions.
       </p>
       <h2>Text messages</h2>
       <p>

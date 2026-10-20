@@ -19,7 +19,7 @@ export default async function OnboardingPage() {
             Back to {ctx.business.name}
           </Link>
         ) : (
-          <form action="/logout" method="post">
+          <form action="/api/logout" method="post">
             <button className="text-sm text-zinc-500 hover:text-zinc-900">Sign out</button>
           </form>
         )}

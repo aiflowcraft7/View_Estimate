@@ -175,7 +175,11 @@ class SimulatedProvider implements PropertyProvider {
 
 let provider: PropertyProvider | undefined;
 export function getPropertyProvider(): PropertyProvider {
-  if (!provider) provider = env.googleServerKey ? new GoogleProvider(env.googleServerKey) : new SimulatedProvider();
+  if (!provider) {
+    if (env.googleServerKey) provider = new GoogleProvider(env.googleServerKey);
+    else if (env.runtimeProduction) throw new Error("GOOGLE_MAPS_SERVER_KEY is required in production");
+    else provider = new SimulatedProvider();
+  }
   return provider;
 }
 

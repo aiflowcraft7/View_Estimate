@@ -32,6 +32,35 @@ export async function funnel(businessId: string, days = 30) {
   };
 }
 
+const CHANNELS = ["widget", "hosted", "qr"] as const;
+
+/** Visits, prices and leads split by website widget, hosted page and QR code. */
+export async function funnelByChannel(businessId: string, days = 30) {
+  const db = await getDb();
+  const since = new Date(Date.now() - days * 86400_000);
+  const ev = await db
+    .select({
+      channel: widgetEvents.channel,
+      event: widgetEvents.event,
+      n: sql<number>`count(distinct coalesce(${widgetEvents.sessionId}, ${widgetEvents.id}::text))::int`,
+    })
+    .from(widgetEvents)
+    .where(and(eq(widgetEvents.businessId, businessId), gte(widgetEvents.createdAt, since)))
+    .groupBy(widgetEvents.channel, widgetEvents.event);
+  const leadRows = await db
+    .select({ channel: quotes.channel, n: sql<number>`count(*)::int` })
+    .from(leads)
+    .innerJoin(quotes, eq(quotes.id, leads.quoteId))
+    .where(and(eq(leads.businessId, businessId), gte(leads.createdAt, since)))
+    .groupBy(quotes.channel);
+  return CHANNELS.map((channel) => ({
+    channel,
+    views: ev.find((r) => r.channel === channel && r.event === "view")?.n ?? 0,
+    quotes: ev.find((r) => r.channel === channel && r.event === "quote")?.n ?? 0,
+    leads: leadRows.find((r) => r.channel === channel)?.n ?? 0,
+  }));
+}
+
 export async function topServices(businessId: string, days = 30) {
   const db = await getDb();
   const since = new Date(Date.now() - days * 86400_000);

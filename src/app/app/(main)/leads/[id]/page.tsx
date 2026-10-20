@@ -5,6 +5,7 @@ import { Badge, Button, Card, Input, Select, Textarea, formatPhone, usd } from "
 import { requireBusiness } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { integrations, leads, notifications, quotes } from "@/lib/db/schema";
+import { SIDING_LABELS } from "@/lib/pricing/types";
 import { fileUrl } from "@/lib/storage";
 import { resyncLead, updateLead } from "../actions";
 import { LEAD_STATUSES, statusColor } from "../status";
@@ -134,7 +135,10 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                     Size: {p.livingSqft ? `${p.livingSqft.toLocaleString()} sq ft home` : p.footprintSqft ? `${p.footprintSqft.toLocaleString()} sq ft footprint` : "unknown"}, {p.stories}{" "}
                     {p.stories === 1 ? "story" : "stories"}
                     {p.roofSqft ? `, ${p.roofSqft.toLocaleString()} sq ft roof` : ""}
-                    {p.roofPitchDegrees ? ` (${Math.round(p.roofPitchDegrees)}° pitch)` : ""}. Source: {SOURCE[p.source] ?? p.source}. Came from: {quote.channel}.
+                    {p.roofPitchDegrees ? ` (${Math.round(p.roofPitchDegrees)}° pitch)` : ""}
+                    {p.siding ? `, ${SIDING_LABELS[p.siding]} siding` : ""}
+                    {p.staining ? ", visible staining" : ""}
+                    {p.neglectedGutters ? ", gutters not cleaned in years" : ""}. Source: {SOURCE[p.source] ?? p.source}. Came from: {quote.channel}.
                   </p>
                 )}
               </>

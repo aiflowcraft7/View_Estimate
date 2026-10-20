@@ -88,7 +88,7 @@ function sampleLead(b: { id: string; name: string; slug: string }): LeadPayload 
       url: "https://example.com",
       photos: [],
     },
-    quote: { id: null, total: 450, priceText: "$450", displayMode: "exact", needsOnsiteConfirmation: false, services: [{ id: "house_wash", name: "House wash", measure: "1,800 sq ft", total: 450 }], discount: null, sizeSource: "solar" },
+    quote: { id: null, total: 450, priceText: "$450", displayMode: "exact", needsOnsiteConfirmation: false, siding: null, staining: false, neglectedGutters: false, services: [{ id: "house_wash", name: "House wash", measure: "1,800 sq ft", total: 450 }], discount: null, sizeSource: "solar" },
     business: { id: b.id, name: b.name, slug: b.slug },
   };
 }

@@ -18,7 +18,7 @@ Open http://localhost:3000. With no `.env` file everything runs in stand-in mode
 |---|---|
 | `/` | Marketing site with a live demo widget |
 | `/demo` | A full demo business to try the quote flow |
-| `/login` | Sign in. Your login link appears at **/dev/outbox** |
+| `/login` | Sign in with Clerk |
 | `/app` | Owner dashboard: leads, prices, install code, settings, integrations, billing |
 | `/admin` | Admin console (for emails in `ADMIN_EMAILS`): businesses, demo builder with claim links, jobs, service health, audit log |
 | `/dev/outbox` | Every email and text the app would have sent |

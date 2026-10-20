@@ -5,7 +5,7 @@ import { requireBusiness } from "@/lib/auth";
 import { getSubscription } from "@/lib/business";
 import { getDb } from "@/lib/db";
 import { leads } from "@/lib/db/schema";
-import { funnel, setupChecklist, topServices } from "@/lib/stats";
+import { funnel, funnelByChannel, setupChecklist, topServices } from "@/lib/stats";
 import { statusColor } from "./leads/status";
 
 export const metadata = { title: "Dashboard" };
@@ -13,11 +13,12 @@ export const metadata = { title: "Dashboard" };
 export default async function Dashboard() {
   const { business: b } = await requireBusiness();
   const db = await getDb();
-  const [f, recent, top, sub] = await Promise.all([
+  const [f, recent, top, sub, channels] = await Promise.all([
     funnel(b.id, 30),
     db.select().from(leads).where(eq(leads.businessId, b.id)).orderBy(desc(leads.createdAt)).limit(6),
     topServices(b.id, 30),
     getSubscription(b.id),
+    funnelByChannel(b.id, 30),
   ]);
   const checklist = await setupChecklist(b, !!sub && ["active", "trialing"].includes(sub.status));
   const remaining = checklist.filter((c) => !c.done);
@@ -70,6 +71,32 @@ export default async function Dashboard() {
           </Card>
         ))}
       </div>
+
+      <Card className="mt-6">
+        <h2 className="font-semibold">Where quotes come from</h2>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs text-zinc-500">
+              <tr>
+                <th className="py-1 pr-4 font-medium">Channel</th>
+                <th className="py-1 pr-4 font-medium">Visits</th>
+                <th className="py-1 pr-4 font-medium">Prices</th>
+                <th className="py-1 font-medium">Leads</th>
+              </tr>
+            </thead>
+            <tbody>
+              {channels.map((c) => (
+                <tr key={c.channel} className="border-t border-zinc-100">
+                  <td className="py-2 pr-4">{c.channel === "widget" ? "Website" : c.channel === "qr" ? "QR code" : "Quote page"}</td>
+                  <td className="py-2 pr-4">{c.views}</td>
+                  <td className="py-2 pr-4">{c.quotes}</td>
+                  <td className="py-2">{c.leads}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">

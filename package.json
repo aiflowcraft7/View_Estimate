@@ -13,13 +13,17 @@
     "db:seed": "tsx --conditions=react-server --env-file-if-exists=.env scripts/seed.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "tsx e2e/demo.ts"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.9.17",
     "@electric-sql/pglite": "^0.5.9",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0",
     "drizzle-orm": "^0.45.4",
     "next": "^16.4.0",
     "postgres": "^3.4.9",
@@ -35,7 +39,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "drizzle-kit": "^0.31.11",
+    "drizzle-kit": "^0.18.1",
     "esbuild": "^0.28.2",
     "playwright": "^1.64.0",
     "tailwindcss": "^4.3.3",
