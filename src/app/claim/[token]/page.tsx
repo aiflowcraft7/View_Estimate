@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AuthShell } from "@/components/brand";
 import { Button, LinkButton } from "@/components/ui";
 import { audit, getSession, setActiveBusiness } from "@/lib/auth";
+import { clearBuildClaimCookie } from "@/lib/build/claim-cookie";
 import { claimBusiness, findClaimable } from "@/lib/business";
 
 export const metadata: Metadata = { title: "Claim your quote page", robots: { index: false } };
@@ -16,6 +17,7 @@ async function claim(form: FormData) {
   const b = await claimBusiness(token, s.user.id, s.user.email);
   if (!b) redirect(`/claim/${token}`);
   await setActiveBusiness(b.id);
+  await clearBuildClaimCookie();
   await audit(s.user.id, b.id, "business.claimed");
   redirect("/app?claimed=1");
 }

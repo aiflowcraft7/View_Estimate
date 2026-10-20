@@ -400,7 +400,11 @@ export function QuoteFlow({
   const detailServices = services.filter((s) => selected[s.id] && (s.unit === "flat_sqft" || s.unit === "window" || s.addons?.length));
 
   return (
-    <div ref={rootRef} className="qf mx-auto w-full max-w-xl text-zinc-900" style={{ ["--accent" as string]: accent }}>
+    <div
+      ref={rootRef}
+      className={`qf mx-auto w-full text-zinc-900 ${embedded ? "max-w-none" : "max-w-xl"}`}
+      style={{ ["--accent" as string]: accent }}
+    >
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200">
         <header className="flex items-center gap-3 border-b border-zinc-100 px-5 py-4">
           {config.logoUrl ? (

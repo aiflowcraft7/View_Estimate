@@ -59,7 +59,7 @@ export default async function Home() {
                 </li>
               ))}
             </ol>
-            <Link href="/login?next=/app/onboarding" className="mt-8 inline-block rounded-full bg-brand-700 px-6 py-3 font-semibold text-white hover:bg-brand-800">
+            <Link href="/build" className="mt-8 inline-block rounded-full bg-brand-700 px-6 py-3 font-semibold text-white hover:bg-brand-800">
               Start your 14-day free trial
             </Link>
             <p className="mt-4 text-sm text-zinc-500">No card needed. Free done-for-you setup. From ${PLANS.starter.monthly}/month.</p>
@@ -69,11 +69,16 @@ export default async function Home() {
       </section>
 
       <section className="px-4 py-16">
-        <div className="mx-auto max-w-xl">
+        <div className="mx-auto w-full max-w-6xl">
           <p className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">Live demo</p>
           <h2 className="mt-3 text-center text-4xl">See the quote page</h2>
-          <div className="mt-8 rounded-[1.75rem] bg-[#efeae3] p-3">
-            <iframe src={`/embed/${demo.slug}`} title="Live demo of the instant quote form" className="h-[640px] w-full rounded-2xl bg-transparent" loading="lazy" />
+          <div className="mx-auto mt-8 w-full max-w-xl rounded-[1.75rem] bg-[#efeae3] p-3 sm:max-w-2xl sm:p-4 md:max-w-3xl lg:max-w-4xl lg:p-5">
+            <iframe
+              src={`/embed/${demo.slug}`}
+              title="Live demo of the instant quote form"
+              className="h-[640px] w-full rounded-2xl bg-transparent sm:h-[680px] md:h-[720px]"
+              loading="lazy"
+            />
           </div>
         </div>
       </section>
@@ -124,7 +129,7 @@ export default async function Home() {
       <section className="bg-brand-800 px-4 py-20 text-center text-white">
         <h2 className="text-4xl">Put instant prices on your site this week</h2>
         <p className="mt-3 text-brand-100">We&apos;ll set it up for you, free. You approve the prices.</p>
-        <Link href="/login?next=/app/onboarding" className="mt-8 inline-block rounded-full bg-white px-6 py-3 font-semibold text-brand-800 hover:bg-brand-50">
+        <Link href="/build" className="mt-8 inline-block rounded-full bg-white px-6 py-3 font-semibold text-brand-800 hover:bg-brand-50">
           Start free trial
         </Link>
       </section>

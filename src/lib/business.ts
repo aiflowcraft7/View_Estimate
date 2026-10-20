@@ -20,7 +20,7 @@ export function slugify(name: string): string {
   );
 }
 
-const RESERVED = new Set(["admin", "app", "api", "embed", "q", "login", "demo", "pricing", "w", "www", "help", "support"]);
+const RESERVED = new Set(["admin", "app", "api", "embed", "q", "login", "demo", "pricing", "w", "www", "help", "support", "build", "p", "claim"]);
 
 export async function uniqueSlug(name: string): Promise<string> {
   const base = slugify(name);
@@ -70,10 +70,10 @@ export async function createBusinessForUser(userId: string, input: NewBusinessIn
 }
 
 /**
- * Admin demo builder: a business with no owner yet, used for outreach demo
- * pages. Returns a one-time claim link the owner uses to take it over.
+ * Unclaimed live business (public /build or admin demo). No owner yet; claim token
+ * lets the creator fine-tune on /p/[slug] and Activate into a trial.
  */
-export async function createDemoBusiness(input: NewBusinessInput) {
+export async function createUnclaimedBusiness(input: NewBusinessInput & { createdByAdmin?: boolean }) {
   const db = await getDb();
   const slug = await uniqueSlug(input.name);
   const claimToken = randomToken(24);
@@ -89,13 +89,19 @@ export async function createDemoBusiness(input: NewBusinessInput) {
       logoUrl: input.logoUrl ?? null,
       pricing: input.pricing ?? (input.serviceIds?.length ? templateFor(input.serviceIds) : DEFAULT_PRICING),
       serviceArea: input.serviceArea ?? {},
+      timezone: input.timezone ?? "America/New_York",
       status: "demo",
-      createdByAdmin: true,
+      createdByAdmin: !!input.createdByAdmin,
       claimTokenHash: sha256(claimToken),
       onboardingComplete: true,
     })
     .returning();
-  return { business: b, claimUrl: `${env.appUrl}/claim/${claimToken}` };
+  return { business: b, claimToken, claimUrl: `${env.appUrl}/claim/${claimToken}` };
+}
+
+/** Admin demo builder (default) or public /build unclaimed page. */
+export async function createDemoBusiness(input: NewBusinessInput & { createdByAdmin?: boolean }) {
+  return createUnclaimedBusiness({ ...input, createdByAdmin: input.createdByAdmin ?? true });
 }
 
 export async function newClaimLink(businessId: string): Promise<string> {

@@ -28,7 +28,7 @@ export default function PricingPage() {
                 ))}
               </ul>
               <Link
-                href="/login?next=/app/onboarding"
+                href="/build"
                 className={`mt-8 block rounded-lg px-4 py-3 text-center font-semibold ${id === "pro" ? "bg-brand-700 text-white hover:bg-brand-800" : "ring-1 ring-zinc-300 hover:bg-zinc-50"}`}
               >
                 Start free trial
