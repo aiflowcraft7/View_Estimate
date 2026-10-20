@@ -2,7 +2,8 @@ import { Badge, Button, Card, Notice, PageHeader } from "@/components/ui";
 import { requireBusiness } from "@/lib/auth";
 import { getSubscription } from "@/lib/business";
 import { paddleLive } from "@/lib/billing/paddle";
-import { PLANS, TRIAL_DAYS, widgetMode } from "@/lib/billing/plans";
+import { FREE_LEADS, FREE_WINDOW_DAYS, PLANS, widgetMode } from "@/lib/billing/plans";
+import { freeLeadUsage } from "@/lib/quotes";
 import { env } from "@/lib/env";
 import { openPortal, setBranding, simulateSubscribe } from "./actions";
 import { CheckoutButton } from "./Checkout";
@@ -13,13 +14,19 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const { business: b, user } = await requireBusiness();
   const sp = await searchParams;
   const sub = await getSubscription(b.id);
-  const mode = widgetMode(b, sub);
+  const free = await freeLeadUsage(b.id);
+  const mode = widgetMode(b, sub, new Date(), free);
   const live = paddleLive();
   const annual = sp.annual === "1";
   const prices = env.paddlePrices;
   const priceFor = (plan: "starter" | "pro") => (plan === "starter" ? (annual ? prices.starter_annual : prices.starter_monthly) : annual ? prices.pro_annual : prices.pro_monthly);
   const subscribed = sub && ["active", "trialing", "past_due"].includes(sub.status);
-  const trialEnds = new Date(b.createdAt.getTime() + TRIAL_DAYS * 86400_000);
+  const used = Math.min(free.leadCount, FREE_LEADS);
+  const windowEnds = new Date(b.createdAt.getTime() + FREE_WINDOW_DAYS * 86400_000);
+  const freeCopy =
+    used >= FREE_LEADS
+      ? "Your 3 free leads are used. Pick a plan to keep instant prices on."
+      : `Free start: ${used} of ${FREE_LEADS} leads used. Prices stay on until your 3rd lead or ${windowEnds.toLocaleDateString()}, whichever comes first.`;
 
   return (
     <>
@@ -43,7 +50,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       <Card className="mb-6">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="font-semibold">Current plan: {PLANS[b.plan].name}</h2>
-          <Badge color={mode === "full" ? "green" : "red"}>{subscribed ? sub!.status : b.status === "demo" ? "demo" : "free trial"}</Badge>
+          <Badge color={mode === "full" ? "green" : "red"}>{subscribed ? sub!.status : b.status === "demo" ? "demo" : "free start"}</Badge>
         </div>
         <p className="mt-2 text-sm text-zinc-600">
           {subscribed
@@ -54,7 +61,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 : "Active."
             : sub?.status === "canceled"
               ? `Canceled. ${mode === "full" ? "Prices keep showing until the end of your paid period." : "Your widget now collects requests without prices."}`
-              : `Free trial ${trialEnds > new Date() ? `ends ${trialEnds.toLocaleDateString()}` : "has ended"}. Pick a plan to keep instant prices on.`}
+              : freeCopy}
         </p>
         {sub?.paddleCustomerId && live && (
           <form action={openPortal} className="mt-3">

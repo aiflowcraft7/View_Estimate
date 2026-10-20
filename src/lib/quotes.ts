@@ -1,21 +1,43 @@
 import "server-only";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, sql } from "drizzle-orm";
 import { getSubscription } from "./business";
-import { widgetMode, type WidgetMode } from "./billing/plans";
+import { FREE_LEADS, widgetMode, type FreeStart, type WidgetMode } from "./billing/plans";
 import { getDb } from "./db";
-import { businesses, leads, quotes, widgetEvents, type QuoteChannel } from "./db/schema";
+import { auditLog, businesses, leads, quotes, widgetEvents, type QuoteChannel } from "./db/schema";
+import { env } from "./env";
 import { enqueue } from "./jobs/queue";
+import { sendEmail } from "./messaging/email";
+import { simpleEmail } from "./messaging/templates";
 import { priceQuote } from "./pricing/engine";
 import type { PropertyFacts, QuoteResult, ServiceSelection } from "./pricing/types";
 
 export type PublicBusiness = typeof businesses.$inferSelect & { mode: WidgetMode };
+
+/** Lead count plus the timestamp of the lead that used up the free allotment. */
+export async function freeLeadUsage(businessId: string): Promise<Required<FreeStart>> {
+  const db = await getDb();
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(leads)
+    .where(eq(leads.businessId, businessId));
+  const leadCount = row?.n ?? 0;
+  if (leadCount < FREE_LEADS) return { leadCount, thirdLeadAt: null };
+  const ranked = await db
+    .select({ createdAt: leads.createdAt })
+    .from(leads)
+    .where(eq(leads.businessId, businessId))
+    .orderBy(asc(leads.createdAt))
+    .limit(FREE_LEADS);
+  return { leadCount, thirdLeadAt: ranked[FREE_LEADS - 1]?.createdAt ?? null };
+}
 
 export async function getPublicBusiness(slug: string): Promise<PublicBusiness | null> {
   const db = await getDb();
   const [b] = await db.select().from(businesses).where(eq(businesses.slug, slug.toLowerCase())).limit(1);
   if (!b) return null;
   const sub = await getSubscription(b.id);
-  return { ...b, mode: widgetMode(b, sub) };
+  const free = await freeLeadUsage(b.id);
+  return { ...b, mode: widgetMode(b, sub, new Date(), free) };
 }
 
 /** Public widget config: only what the browser needs, never contact details or internals. */
@@ -136,5 +158,34 @@ export async function createLead(input: NewLead) {
   ];
   const { enqueueCrmSync } = await import("./integrations/sync");
   jobIds.push(...(await enqueueCrmSync(input.business.id, lead.id)));
+  await notifyFreeLeadsUsed(input.business.id, input.business.alertEmail);
   return { lead, jobIds };
+}
+
+/** One email when the free allotment is used and there is no paid subscription. */
+async function notifyFreeLeadsUsed(businessId: string, alertEmail: string | null) {
+  if (!alertEmail) return;
+  const usage = await freeLeadUsage(businessId);
+  if (usage.leadCount !== FREE_LEADS) return;
+  const sub = await getSubscription(businessId);
+  if (sub && ["active", "trialing", "past_due"].includes(sub.status)) return;
+  const db = await getDb();
+  const [done] = await db
+    .select({ id: auditLog.id })
+    .from(auditLog)
+    .where(and(eq(auditLog.businessId, businessId), eq(auditLog.action, "email.free_leads_used")))
+    .limit(1);
+  if (done) return;
+  const sent = await sendEmail(
+    simpleEmail(
+      alertEmail,
+      "Your 3 free leads are in",
+      [
+        "Those first 3 leads were on us.",
+        "Pick Starter or Pro to keep instant prices on your website. If you don't, your widget keeps collecting requests, just without prices.",
+      ],
+      { url: `${env.appUrl}/app/billing`, label: "Choose a plan" },
+    ),
+  );
+  if (sent.ok) await db.insert(auditLog).values({ businessId, action: "email.free_leads_used" });
 }

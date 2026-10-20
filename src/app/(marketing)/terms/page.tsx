@@ -20,7 +20,7 @@ export default function Terms() {
       <p>Don&apos;t misuse the service: no unlawful, deceptive or spam content, no attempts to break security, no reselling without our written permission.</p>
       <h2>Free trial, billing and cancellation</h2>
       <ul>
-        <li>New accounts get a 14-day free trial. Paid plans renew monthly or yearly until canceled.</li>
+        <li>New accounts start free: the first 3 leads are included, and prices stay on until the 3rd lead or 45 days after you claim the page, whichever comes first. After that, pick a paid plan. Plans renew monthly or yearly until canceled.</li>
         <li>Payments are processed by Paddle.com, our merchant of record, which also handles sales tax, invoices and refunds under its buyer terms.</li>
         <li>You can cancel anytime from the billing page. Service continues to the end of the paid period. If payment stops, your quote form keeps collecting requests without showing prices.</li>
       </ul>

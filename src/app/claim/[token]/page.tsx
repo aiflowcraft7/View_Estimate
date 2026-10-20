@@ -39,7 +39,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ token: s
   return (
     <AuthShell title={`Your quote page for ${b.name} is ready`}>
       <p className="text-sm text-zinc-600">
-        We set up your prices and branding. Claim it to get leads by text and email, adjust prices, and put it on your website. Your 14-day free trial starts today.
+        We set up your prices and branding. Claim it to get leads by text and email, adjust prices, and put it on your website. Your first 3 leads are free. No card today.
       </p>
       <a href={`/q/${b.slug}`} target="_blank" rel="noopener" className="mt-3 block text-sm font-medium text-brand-700 underline">
         Preview your quote page

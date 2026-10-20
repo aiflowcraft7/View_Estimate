@@ -41,6 +41,7 @@ const FAQ = [
   ["Do I need a new CRM?", "No. Leads go to Jobber, GoHighLevel, or anything Zapier connects to, and to your phone and inbox."],
   ["What happens if I stop paying?", "Your widget never breaks. It keeps collecting quote requests, just without showing prices."],
   ["Is there a contract?", "No. Monthly or yearly, cancel anytime from your billing page."],
+  ["How does the free start work?", "Build your page with no card. Your first 3 leads are free. After the 3rd lead, or 45 days if you have fewer, pick Starter or Pro. If you don't, the widget keeps collecting requests without prices."],
 ];
 
 export default async function Home() {
@@ -60,9 +61,9 @@ export default async function Home() {
               ))}
             </ol>
             <Link href="/build" className="mt-8 inline-block rounded-full bg-brand-700 px-6 py-3 font-semibold text-white hover:bg-brand-800">
-              Start your 14-day free trial
+              Get started for free
             </Link>
-            <p className="mt-4 text-sm text-zinc-500">No card needed. Free done-for-you setup. From ${PLANS.starter.monthly}/month.</p>
+            <p className="mt-4 text-sm text-zinc-500">Free to start — your first 3 leads are on us. Then from ${PLANS.starter.monthly}/month, cancel anytime. No card to start.</p>
           </div>
           <HeroCarousel />
         </div>

@@ -52,6 +52,7 @@ export function BuildClient() {
       {mode === "website" ? (
         <>
           <h1 className="text-center text-4xl leading-tight sm:text-5xl">Enter your website and we&apos;ll automatically build your pricing widget.</h1>
+          <p className="mt-4 text-center text-sm text-zinc-600">Free to start — your first 3 leads are on us. No card to start.</p>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-stretch">
             <label className="sr-only" htmlFor="website">
               Your website

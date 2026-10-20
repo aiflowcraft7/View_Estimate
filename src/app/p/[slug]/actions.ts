@@ -33,8 +33,8 @@ export async function activateAction(slug: string, email: string): Promise<{ err
   await sendEmail({
     to: parsed.data,
     subject: `Claim your ${env.appName} quote page`,
-    text: `Your quote page for ${ctx.business.name} is ready.\n\nClaim it here (starts your 14-day free trial):\n${claimUrl}\n\nHosted page: ${env.appUrl}/q/${ctx.business.slug}`,
-    html: `<p>Your quote page for <strong>${ctx.business.name}</strong> is ready.</p><p><a href="${claimUrl}">Claim it</a> to create your free login and start your 14-day trial.</p><p>Hosted page: <a href="${env.appUrl}/q/${ctx.business.slug}">${env.appUrl}/q/${ctx.business.slug}</a></p>`,
+    text: `Your quote page for ${ctx.business.name} is ready.\n\nClaim it here (your first 3 leads are free):\n${claimUrl}\n\nHosted page: ${env.appUrl}/q/${ctx.business.slug}`,
+    html: `<p>Your quote page for <strong>${ctx.business.name}</strong> is ready.</p><p><a href="${claimUrl}">Claim it</a> to create your free login. Your first 3 leads are free.</p><p>Hosted page: <a href="${env.appUrl}/q/${ctx.business.slug}">${env.appUrl}/q/${ctx.business.slug}</a></p>`,
   });
 
   redirect(`/claim/${token}`);

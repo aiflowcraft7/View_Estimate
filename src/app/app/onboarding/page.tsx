@@ -26,7 +26,7 @@ export default async function OnboardingPage() {
       </div>
       <div className="mx-auto mb-6 max-w-xl">
         <h1 className="text-2xl font-bold">Set up instant quotes</h1>
-        <p className="mt-1 text-sm text-zinc-600">Four quick steps. Your 14-day free trial starts now, no card needed.</p>
+        <p className="mt-1 text-sm text-zinc-600">Four quick steps. Your first 3 leads are free, no card needed.</p>
       </div>
       <Wizard email={user.email} />
     </main>

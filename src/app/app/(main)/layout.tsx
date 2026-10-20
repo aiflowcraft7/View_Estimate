@@ -3,9 +3,10 @@ import Link from "next/link";
 import { Logo } from "@/components/brand";
 import { requireBusiness } from "@/lib/auth";
 import { getSubscription } from "@/lib/business";
-import { TRIAL_DAYS, widgetMode } from "@/lib/billing/plans";
+import { FREE_LEADS, widgetMode } from "@/lib/billing/plans";
 import { getDb } from "@/lib/db";
 import { leads } from "@/lib/db/schema";
+import { freeLeadUsage } from "@/lib/quotes";
 import { stopActingAs, switchBusiness } from "../actions";
 import { Nav } from "./Nav";
 
@@ -20,8 +21,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .from(leads)
     .where(and(eq(leads.businessId, b.id), eq(leads.status, "new")));
   const sub = await getSubscription(b.id);
-  const mode = widgetMode(b, sub);
-  const trialDaysLeft = Math.ceil((b.createdAt.getTime() + TRIAL_DAYS * 86400_000 - Date.now()) / 86400_000);
+  const free = await freeLeadUsage(b.id);
+  const mode = widgetMode(b, sub, new Date(), free);
+  const used = Math.min(free.leadCount, FREE_LEADS);
   const onTrial = !sub && b.status !== "demo";
 
   return (
@@ -44,7 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       )}
       {mode === "full" && onTrial && (
         <div className="bg-brand-800 px-4 py-2 text-center text-sm text-white">
-          {trialDaysLeft > 0 ? `Free trial: ${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} left.` : "Your trial has ended."}{" "}
+          {used < FREE_LEADS ? `Free start: ${used} of ${FREE_LEADS} leads used.` : "Your 3 free leads are used."}{" "}
           <Link href="/app/billing" className="font-semibold underline">
             Choose a plan
           </Link>

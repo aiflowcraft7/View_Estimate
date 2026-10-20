@@ -6,8 +6,8 @@ export const metadata = { title: "Pricing" };
 export default function PricingPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-16">
-      <h1 className="text-center text-4xl font-extrabold tracking-tight">Simple pricing</h1>
-      <p className="mt-3 text-center text-zinc-600">14-day free trial. Free done-for-you setup on every plan. Yearly plans get 2 months free.</p>
+      <h1 className="text-center text-4xl font-extrabold tracking-tight">Don&apos;t pay until you know it works</h1>
+      <p className="mt-3 text-center text-zinc-600">Your first 3 leads are free. Then Starter or Pro below. No card to start. Yearly plans get 2 months free.</p>
       <div className="mt-10 grid gap-6 md:grid-cols-2">
         {(["starter", "pro"] as const).map((id) => {
           const p = PLANS[id];

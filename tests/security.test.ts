@@ -89,10 +89,18 @@ describe("widget mode (billing never breaks the widget)", () => {
   const day = 86400_000;
   const now = new Date("2026-10-13T00:00:00Z");
   const b = (createdDaysAgo: number, status = "trial") => ({ status, createdAt: new Date(now.getTime() - createdDaysAgo * day) });
-  it("trial then grace then requests-only", () => {
-    expect(widgetMode(b(5), null, now)).toBe("full");
-    expect(widgetMode(b(18), null, now)).toBe("full");
-    expect(widgetMode(b(30), null, now)).toBe("requests_only");
+  it("free start stays full under 3 leads and inside 45 days, then grace", () => {
+    expect(widgetMode(b(5), null, now, { leadCount: 0 })).toBe("full");
+    expect(widgetMode(b(10), null, now, { leadCount: 2 })).toBe("full");
+    expect(widgetMode(b(30), null, now, { leadCount: 1 })).toBe("full");
+    expect(widgetMode(b(46), null, now, { leadCount: 0 })).toBe("full");
+    expect(widgetMode(b(53), null, now, { leadCount: 0 })).toBe("requests_only");
+  });
+  it("the 3rd lead ends the free start after grace; a paid plan stays full", () => {
+    expect(widgetMode(b(10), null, now, { leadCount: 3, thirdLeadAt: new Date(now.getTime() - day) })).toBe("full");
+    expect(widgetMode(b(20), null, now, { leadCount: 3, thirdLeadAt: new Date(now.getTime() - 8 * day) })).toBe("requests_only");
+    const active = { status: "active", trialEndsAt: null, currentPeriodEnd: null, pastDueSince: null };
+    expect(widgetMode(b(60), active, now, { leadCount: 10, thirdLeadAt: new Date(now.getTime() - 30 * day) })).toBe("full");
   });
   it("past due keeps prices for the grace period", () => {
     const sub = { status: "past_due", trialEndsAt: null, currentPeriodEnd: null, pastDueSince: new Date(now.getTime() - 3 * day) };

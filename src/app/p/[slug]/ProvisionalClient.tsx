@@ -89,7 +89,7 @@ export function ProvisionalClient({ slug, editable, name: initialName, brandColo
               </button>
             </div>
             <p className="mt-2 text-sm text-zinc-600">
-              Activating creates your free login — your widget and leads live in your dashboard from then on. Your 14-day trial starts when you claim.
+              Activating creates your free login — your widget and leads live in your dashboard from then on. Your first 3 leads are free. No card until you pick a plan.
             </p>
           </section>
 

@@ -1,8 +1,8 @@
 import "server-only";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
-import { TRIAL_DAYS } from "./billing/plans";
+import { FREE_LEADS, FREE_WINDOW_DAYS } from "./billing/plans";
 import { getDb } from "./db";
-import { auditLog, businesses, loginTokens, rateLimits, sessions, subscriptions } from "./db/schema";
+import { auditLog, businesses, leads, loginTokens, rateLimits, sessions, subscriptions } from "./db/schema";
 import { env } from "./env";
 import { sendEmail } from "./messaging/email";
 import { simpleEmail, usd } from "./messaging/templates";
@@ -13,9 +13,10 @@ export async function runDaily(now = new Date()) {
   const db = await getDb();
   const out = { trialReminders: 0, monthlyReports: 0 };
 
-  // 1) Trial ends in 3 days and no subscription yet.
-  const from = new Date(now.getTime() - (TRIAL_DAYS - 3) * 86400_000 - 86400_000);
-  const to = new Date(now.getTime() - (TRIAL_DAYS - 3) * 86400_000);
+  // 1) Free window ends in 3 days, still under 3 leads, no subscription yet.
+  const remindDays = FREE_WINDOW_DAYS - 3;
+  const from = new Date(now.getTime() - remindDays * 86400_000 - 86400_000);
+  const to = new Date(now.getTime() - remindDays * 86400_000);
   const trials = await db
     .select({ b: businesses })
     .from(businesses)
@@ -23,13 +24,18 @@ export async function runDaily(now = new Date()) {
     .where(and(eq(businesses.status, "trial"), isNull(subscriptions.businessId), gte(businesses.createdAt, from), lt(businesses.createdAt, to)));
   for (const { b } of trials) {
     if (!b.alertEmail || (await alreadyDone(b.id, "email.trial_reminder"))) continue;
-    const f = await funnel(b.id, TRIAL_DAYS);
+    const [counted] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(eq(leads.businessId, b.id));
+    if ((counted?.n ?? 0) >= FREE_LEADS) continue;
+    const f = await funnel(b.id, FREE_WINDOW_DAYS);
     const r = await sendEmail(
       simpleEmail(
         b.alertEmail,
-        "Your free trial ends in 3 days",
+        "Your free start ends in 3 days",
         [
-          `So far your quote page showed ${f.quotes} prices and brought in ${f.leads} lead${f.leads === 1 ? "" : "s"} worth ${usd(f.quotedValue)}.`,
+          `So far your quote page showed ${f.quotes} prices and brought in ${f.leads} lead${f.leads === 1 ? "" : "s"} worth ${usd(f.quotedValue)}. Your first ${FREE_LEADS} leads are free.`,
           "Pick a plan to keep instant prices on your website. If you don't, your widget keeps collecting requests, just without prices.",
         ],
         { url: `${env.appUrl}/app/billing`, label: "Choose a plan" },
